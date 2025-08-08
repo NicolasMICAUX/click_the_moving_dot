@@ -21,6 +21,10 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
   "dependencies": {
     "@google-cloud/bigquery": "^8.1.1",
     "@google-cloud/firestore": "^7.11.3",
