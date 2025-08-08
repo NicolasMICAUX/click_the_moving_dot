@@ -1,3 +1,5 @@
 .github/copilot-instructions.md
 node_modules
 TODO.md
+.env
+service-account-key.json
