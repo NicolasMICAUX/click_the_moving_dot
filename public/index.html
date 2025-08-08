@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click the Moving Dot</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .game-info {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .level { color: #007bff; }
+        .speed { color: #28a745; }
+        .user-id { color: #6c757d; font-size: 12px; }
+        
+        #gameArena {
+            border: 3px solid #333;
+            background-color: #fff;
+            cursor: crosshair;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .instructions {
+            margin-top: 20px;
+            max-width: 600px;
+            text-align: center;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>Click the Moving Dot</h1>
+    
+    <div class="game-info">
+        <div class="level">Level: <span id="levelDisplay">1</span></div>
+        <div class="speed">Speed: <span id="speedDisplay">1.0</span></div>
+    </div>
+    
+    <canvas id="gameArena" width="800" height="800"></canvas>
+    
+    <div class="user-id">User ID: <span id="userIdDisplay">Loading...</span></div>
+    
+    <div class="instructions">
+        <p><strong>Instructions:</strong> Click the red dot to advance to the next level. The dot will try to escape from your mouse cursor and gets faster with each level!</p>
+    </div>
+
+    <script>
+        class ClickTheDotGame {
+            constructor() {
+                this.canvas = document.getElementById('gameArena');
+                this.ctx = this.canvas.getContext('2d');
+                this.userUid = this.getUserUid();
+                this.sessionUid = this.generateSessionUid();
+                this.level = 1;
+                this.maxSpeed = 0.5; // Base speed
+                this.dotPosition = { x: 400, y: 400 };
+                this.mousePosition = { x: 0, y: 0 };
+                this.dotRadius = 15;
+                this.mouseTrackingData = [];
+                this.sessionStartTime = Date.now();
+                this.lastUpdateTime = Date.now();
+                this.gameRunning = true;
+                this.animationId = null;
+                
+                // Dot movement state
+                this.dotVelocity = { x: 0, y: 0 };
+                this.noiseState = { x: 0, y: 0 }; // For correlated noise
+                
+                this.initializeGame();
+                this.setupEventListeners();
+                this.startGameLoop();
+                this.setupDataSaving();
+            }
+            
+            getUserUid() {
+                let userUid = localStorage.getItem('user_uid');
+                if (!userUid) {
+                    userUid = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    localStorage.setItem('user_uid', userUid);
+                }
+                return userUid;
+            }
+            
+            generateSessionUid() {
+                return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            }
+            
+            initializeGame() {
+                document.getElementById('userIdDisplay').textContent = this.userUid;
+                this.updateUI();
+                this.drawGame();
+            }
+            
+            setupEventListeners() {
+                // Mouse move tracking
+                this.canvas.addEventListener('mousemove', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.mousePosition.x = e.clientX - rect.left;
+                    this.mousePosition.y = e.clientY - rect.top;
+                    
+                    // Record tracking data
+                    this.recordMouseTracking();
+                });
+                
+                // Click handling
+                this.canvas.addEventListener('click', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left;
+                    const clickY = e.clientY - rect.top;
+                    
+                    if (this.checkCollision(clickX, clickY)) {
+                        this.levelUp();
+                    }
+                });
+            }
+            
+            setupDataSaving() {
+                // Save data when page is about to unload
+                window.addEventListener('beforeunload', () => {
+                    this.saveSessionData(true); // Use beacon for reliable sending
+                });
+                
+                // Also save data when page becomes hidden (mobile apps, tab switching)
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden) {
+                        this.saveSessionData(true);
+                    }
+                });
+                
+                // Periodic save (every 30 seconds) as backup
+                setInterval(() => {
+                    if (this.mouseTrackingData.length > 0) {
+                        this.saveSessionData(false);
+                    }
+                }, 30000);
+            }
+            
+            recordMouseTracking() {
+                const now = Date.now();
+                this.mouseTrackingData.push({
+                    timestamp: now,
+                    dotX: this.dotPosition.x,
+                    dotY: this.dotPosition.y,
+                    mouseX: this.mousePosition.x,
+                    mouseY: this.mousePosition.y
+                });
+            }
+            
+            updateDotPosition() {
+                const now = Date.now();
+                const deltaTime = (now - this.lastUpdateTime) / 1000; // Convert to seconds
+                
+                // Calculate escape vector (dot moves away from mouse)
+                const dx = this.dotPosition.x - this.mousePosition.x;
+                const dy = this.dotPosition.y - this.mousePosition.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > 0) {
+                    // Normalize escape direction
+                    const normalizedDx = dx / distance;
+                    const normalizedDy = dy / distance;
+                    
+                    // Add correlated random noise that changes smoothly over time
+                    this.noiseState.x += (Math.random() - 0.5) * 0.1;
+                    this.noiseState.y += (Math.random() - 0.5) * 0.1;
+                    this.noiseState.x *= 0.9; // Decay factor
+                    this.noiseState.y *= 0.9;
+                    
+                    // Calculate target velocity
+                    const speed = this.maxSpeed * 100; // pixels per second
+                    const targetVx = (normalizedDx + this.noiseState.x * 0.3) * speed;
+                    const targetVy = (normalizedDy + this.noiseState.y * 0.3) * speed;
+                    
+                    // Smooth velocity interpolation for natural movement
+                    this.dotVelocity.x += (targetVx - this.dotVelocity.x) * 0.1;
+                    this.dotVelocity.y += (targetVy - this.dotVelocity.y) * 0.1;
+                    
+                    // Update position
+                    let newX = this.dotPosition.x + this.dotVelocity.x * deltaTime;
+                    let newY = this.dotPosition.y + this.dotVelocity.y * deltaTime;
+                    
+                    // Keep dot within arena bounds
+                    newX = Math.max(this.dotRadius, Math.min(800 - this.dotRadius, newX));
+                    newY = Math.max(this.dotRadius, Math.min(800 - this.dotRadius, newY));
+                    
+                    // Bounce off walls
+                    if (newX <= this.dotRadius || newX >= 800 - this.dotRadius) {
+                        this.dotVelocity.x *= -0.5;
+                    }
+                    if (newY <= this.dotRadius || newY >= 800 - this.dotRadius) {
+                        this.dotVelocity.y *= -0.5;
+                    }
+                    
+                    this.dotPosition.x = newX;
+                    this.dotPosition.y = newY;
+                }
+                
+                this.lastUpdateTime = now;
+            }
+            
+            checkCollision(clickX, clickY) {
+                const dx = this.dotPosition.x - clickX;
+                const dy = this.dotPosition.y - clickY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                return distance <= this.dotRadius;
+            }
+            
+            levelUp() {
+                // Save current session data before starting new level
+                this.saveSessionData(false);
+                
+                this.level++;
+                this.maxSpeed += 0.1; // Increase speed by 10% each level
+                
+                // Reset dot position to center
+                this.dotPosition = { x: 400, y: 400 };
+                this.dotVelocity = { x: 0, y: 0 };
+                this.noiseState = { x: 0, y: 0 };
+                
+                // Start new session for this level
+                this.sessionUid = this.generateSessionUid();
+                this.mouseTrackingData = [];
+                this.sessionStartTime = Date.now();
+                
+                this.updateUI();
+                this.showLevelUpEffect();
+            }
+            
+            async saveSessionData(useBeacon = false) {
+                if (this.mouseTrackingData.length === 0) return;
+                
+                const sessionData = {
+                    sessionUid: this.sessionUid,
+                    userUid: this.userUid,
+                    level: this.level,
+                    maxSpeed: this.maxSpeed,
+                    sessionStartTime: this.sessionStartTime,
+                    sessionEndTime: Date.now(),
+                    mouseTrackingData: [...this.mouseTrackingData] // Copy array
+                };
+                
+                const payload = JSON.stringify(sessionData);
+                
+                if (useBeacon && navigator.sendBeacon) {
+                    // Use beacon for reliable sending during page unload
+                    const blob = new Blob([payload], { type: 'application/json' });
+                    navigator.sendBeacon('/api/save-session', blob);
+                } else {
+                    // Regular fetch request
+                    try {
+                        const response = await fetch('/api/save-session', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: payload
+                        });
+                        
+                        if (response.ok) {
+                            console.log(`Session ${this.sessionUid} saved successfully`);
+                        } else {
+                            console.error('Failed to save session data:', response.statusText);
+                        }
+                    } catch (error) {
+                        console.error('Error saving session data:', error);
+                    }
+                }
+            }
+            
+            startGameLoop() {
+                const gameLoop = () => {
+                    if (this.gameRunning) {
+                        this.updateDotPosition();
+                        this.drawGame();
+                        this.animationId = requestAnimationFrame(gameLoop);
+                    }
+                };
+                gameLoop();
+            }
+            
+            updateUI() {
+                document.getElementById('levelDisplay').textContent = this.level;
+                document.getElementById('speedDisplay').textContent = this.maxSpeed.toFixed(1);
+            }
+            
+            showLevelUpEffect() {
+                // Simple flash effect
+                this.canvas.style.boxShadow = '0 0 20px #28a745';
+                setTimeout(() => {
+                    this.canvas.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+                }, 300);
+            }
+            
+            drawGame() {
+                // Clear canvas
+                this.ctx.clearRect(0, 0, 800, 800);
+                
+                // Draw arena background
+                this.ctx.fillStyle = '#f8f9fa';
+                this.ctx.fillRect(0, 0, 800, 800);
+                
+                // Draw grid lines for better visual reference
+                this.ctx.strokeStyle = '#e9ecef';
+                this.ctx.lineWidth = 1;
+                for (let i = 0; i <= 800; i += 100) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(i, 0);
+                    this.ctx.lineTo(i, 800);
+                    this.ctx.stroke();
+                    
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, i);
+                    this.ctx.lineTo(800, i);
+                    this.ctx.stroke();
+                }
+                
+                // Draw mouse cursor trail (subtle)
+                if (this.mousePosition.x > 0 && this.mousePosition.y > 0) {
+                    this.ctx.beginPath();
+                    this.ctx.arc(this.mousePosition.x, this.mousePosition.y, 3, 0, 2 * Math.PI);
+                    this.ctx.fillStyle = 'rgba(0, 123, 255, 0.3)';
+                    this.ctx.fill();
+                }
+                
+                // Draw the dot
+                this.ctx.beginPath();
+                this.ctx.arc(this.dotPosition.x, this.dotPosition.y, this.dotRadius, 0, 2 * Math.PI);
+                
+                // Gradient fill for the dot
+                const gradient = this.ctx.createRadialGradient(
+                    this.dotPosition.x, this.dotPosition.y, 0,
+                    this.dotPosition.x, this.dotPosition.y, this.dotRadius
+                );
+                gradient.addColorStop(0, '#ff6b6b');
+                gradient.addColorStop(1, '#dc3545');
+                this.ctx.fillStyle = gradient;
+                this.ctx.fill();
+                
+                // Dot border
+                this.ctx.strokeStyle = '#fff';
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+                
+                // Draw speed indicator around dot
+                this.ctx.beginPath();
+                this.ctx.arc(this.dotPosition.x, this.dotPosition.y, this.dotRadius + 5, 0, 2 * Math.PI);
+                this.ctx.strokeStyle = `rgba(255, 193, 7, ${Math.min(this.maxSpeed / 2, 1)})`;
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+            }
+        }
+        
+        // Initialize game when page loads
+        window.addEventListener('load', () => {
+            new ClickTheDotGame();
+        });
+    </script>
+</body>
+</html>

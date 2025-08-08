@@ -1,0 +1,33 @@
+{
+  "name": "click_the_moving_dot_code",
+  "version": "1.0.0",
+  "description": "Real-time HTML5 game where users click a moving dot that tries to escape. Built for Google Cloud with efficient data collection.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "game",
+    "html5",
+    "canvas",
+    "websocket",
+    "realtime",
+    "google-cloud",
+    "mouse-tracking",
+    "ai-ready"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@google-cloud/bigquery": "^8.1.1",
+    "@google-cloud/firestore": "^7.11.3",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "uuid": "^11.1.0"
+  }
+}

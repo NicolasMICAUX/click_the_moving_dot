@@ -1,0 +1,19 @@
+runtime: nodejs18
+
+env_variables:
+  GOOGLE_CLOUD_PROJECT: clickthemovingdot
+
+automatic_scaling:
+  min_instances: 1
+  max_instances: 100
+  target_cpu_utilization: 0.6
+
+resources:
+  cpu: 1
+  memory_gb: 0.5
+  disk_size_gb: 10
+
+handlers:
+- url: /.*
+  script: auto
+  secure: always
