@@ -121,16 +121,16 @@
                     this.recordMouseTracking();
                 });
                 
-                // Click handling
-                this.canvas.addEventListener('click', (e) => {
-                    const rect = this.canvas.getBoundingClientRect();
-                    const clickX = e.clientX - rect.left;
-                    const clickY = e.clientY - rect.top;
+                    // Mousedown handling (more responsive than click)
+                    this.canvas.addEventListener('mousedown', (e) => {
+                        const rect = this.canvas.getBoundingClientRect();
+                        const clickX = e.clientX - rect.left;
+                        const clickY = e.clientY - rect.top;
                     
-                    if (this.checkCollision(clickX, clickY)) {
-                        this.levelUp();
-                    }
-                });
+                        if (this.checkCollision(clickX, clickY)) {
+                            this.levelUp();
+                        }
+                    });
             }
             
             setupDataSaving() {
