@@ -134,7 +134,7 @@
                 document.getElementById('aiStatus').textContent = 'Loading...';
                 
                 try {
-                    const modelLoaded = await this.dotAI.loadModel('/dummy_dot_behavior.onnx');
+                    const modelLoaded = await this.dotAI.loadModel('/api/onnx-model');
                     if (modelLoaded) {
                         console.log('✅ AI model loaded successfully - using AI for dot behavior');
                         document.getElementById('aiStatus').textContent = 'Enabled';
@@ -221,7 +221,6 @@
 
                 // Clip target velocity magnitude to maxSpeed (converted to px/s)
                 const maxPixelSpeed = this.maxSpeed * 100;
-                console.log(targetVx, targetVy, maxPixelSpeed);
                 let mag = Math.hypot(targetVx, targetVy);
                 if (!isFinite(mag) || mag === 0) {
                     targetVx = 0;
@@ -486,9 +485,7 @@
                         historyMatrix[offset + 3] = point.mouseX;
                         historyMatrix[offset + 4] = point.mouseY;
                     }
-                    
-                    console.log(`🤖 AI processing ${seqLen} history points (dynamic length)`);
-                    
+                                        
                     const input = {
                         history: new ort.Tensor('float32', historyMatrix, [seqLen, 5]), // Dynamic shape!
                         config: new ort.Tensor('float32', [config.maxSpeed], [1])

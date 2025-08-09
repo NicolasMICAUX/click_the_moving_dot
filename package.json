@@ -5,7 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "start:local": "DISABLE_CLOUD=true node server.js",
+    "start:onnx": "node server.js --onnx",
+    "start:local-onnx": "DISABLE_CLOUD=true node server.js --onnx",
     "dev": "nodemon server.js",
+    "dev:local": "DISABLE_CLOUD=true nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

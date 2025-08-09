@@ -8,10 +8,33 @@ const fs = require('fs');
 const cors = require('cors');
 const compression = require('compression');
 const { v4: uuidv4 } = require('uuid');
-const { BigQuery } = require('@google-cloud/bigquery');
-const { Storage } = require('@google-cloud/storage');
-const { ParquetWriter, ParquetSchema } = require('parquetjs-lite');
-const { Table, Schema, Field, Float64, Int32, Int64, Utf8, TimestampMillisecond, tableToIPC, RecordBatch, tableFromJSON, vectorFromArray, tableFromIPC, RecordBatchFileWriter } = require('apache-arrow');
+
+// Parse command line arguments
+const args = process.argv.slice(2);
+const onnxFileArg = args.find(arg => arg.startsWith('--onnx'));
+const customOnnxFile = onnxFileArg ? onnxFileArg.split('=')[1] : null;
+
+// Check if cloud services should be disabled
+const DISABLE_CLOUD = process.env.DISABLE_CLOUD === 'true' || process.env.NODE_ENV === 'development';
+
+// Only import cloud services if not disabled
+let BigQuery, Storage, ParquetWriter, ParquetSchema, Table, Schema, Field, Float64, Int32, Int64, Utf8, TimestampMillisecond, tableToIPC, RecordBatch, tableFromJSON, vectorFromArray, tableFromIPC, RecordBatchFileWriter;
+let bigquery, storage;
+
+if (!DISABLE_CLOUD) {
+    try {
+        ({ BigQuery } = require('@google-cloud/bigquery'));
+        ({ Storage } = require('@google-cloud/storage'));
+        ({ ParquetWriter, ParquetSchema } = require('parquetjs-lite'));
+        ({ Table, Schema, Field, Float64, Int32, Int64, Utf8, TimestampMillisecond, tableToIPC, RecordBatch, tableFromJSON, vectorFromArray, tableFromIPC, RecordBatchFileWriter } = require('apache-arrow'));
+        
+        console.log('✅ Cloud services dependencies loaded');
+    } catch (error) {
+        console.log('⚠️ Cloud services not available:', error.message);
+        console.log('Running in local mode without cloud storage');
+        DISABLE_CLOUD = true;
+    }
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -25,17 +48,22 @@ app.use(express.static('public'));
 // Google Cloud configuration
 const projectId = process.env.GOOGLE_CLOUD_PROJECT || 'clickthemovingdot';
 
-// Initialize BigQuery with explicit configuration
-const bigquery = new BigQuery({
-    projectId: projectId,
-    keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
-});
+// Initialize BigQuery and Storage only if cloud services are enabled
+if (!DISABLE_CLOUD) {
+    // Initialize BigQuery with explicit configuration
+    bigquery = new BigQuery({
+        projectId: projectId,
+        keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
+    });
 
-// Initialize Cloud Storage with explicit configuration
-const storage = new Storage({
-    projectId: projectId,
-    keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
-});
+    // Initialize Cloud Storage with explicit configuration
+    storage = new Storage({
+        projectId: projectId,
+        keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
+    });
+} else {
+    console.log('🔧 Running in local mode - cloud services disabled');
+}
 
 // Cloud Storage bucket for dataset exports
 const EXPORT_BUCKET_NAME = 'clickthemovingdot-exports';
@@ -51,6 +79,11 @@ const TABLE_ID = 'mouse_tracking';
 
 // Initialize Google Cloud services
 async function initializeCloudServices() {
+    if (DISABLE_CLOUD) {
+        console.log('🔧 Cloud services disabled - running in local mode');
+        return;
+    }
+
     try {
         // Initialize BigQuery
         const dataset = bigquery.dataset(DATASET_ID);
@@ -98,11 +131,17 @@ async function initializeCloudServices() {
         console.log('✅ Google Cloud services initialized successfully');
     } catch (error) {
         console.error('❌ Google Cloud services initialization failed:', error);
+        console.log('⚠️ Continuing without cloud services - game will work but data won\'t be saved');
     }
 }
 
 // Stream session data to BigQuery
 async function streamToBigQuery(sessionData) {
+    if (DISABLE_CLOUD) {
+        console.log(`[LOCAL MODE] Session ${sessionData.sessionUid} for user ${sessionData.userUid} with ${sessionData.mouseTrackingData.length} tracking points - data not saved`);
+        return;
+    }
+
     try {
         const table = bigquery.dataset(DATASET_ID).table(TABLE_ID);
         
@@ -132,6 +171,10 @@ async function streamToBigQuery(sessionData) {
 
 // Generate and cache dataset export to Cloud Storage
 async function generateAndCacheDataset() {
+    if (DISABLE_CLOUD) {
+        throw new Error('Dataset generation requires cloud services. Run with cloud access to generate datasets.');
+    }
+
     try {
         const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
         const bucket = storage.bucket(EXPORT_BUCKET_NAME);
@@ -385,6 +428,65 @@ app.get('/dataset', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dataset.html'));
 });
 
+// Serve custom ONNX model if specified
+app.get('/api/onnx-model', (req, res) => {
+    let onnxPath;
+    
+    if (customOnnxFile) {
+        // Custom ONNX file specified via command line
+        if (path.isAbsolute(customOnnxFile)) {
+            onnxPath = customOnnxFile;
+        } else {
+            onnxPath = path.join(__dirname, customOnnxFile);
+        }
+    } else {
+        // Default ONNX file
+        onnxPath = path.join(__dirname, 'public', 'dummy_dot_behavior.onnx');
+    }
+    
+    // Check if file exists
+    if (!fs.existsSync(onnxPath)) {
+        return res.status(404).json({ 
+            error: 'ONNX model not found',
+            path: onnxPath,
+            customFile: !!customOnnxFile
+        });
+    }
+    
+    console.log(`Serving ONNX model: ${onnxPath}`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.sendFile(onnxPath);
+});
+
+// Get ONNX model info
+app.get('/api/onnx-info', (req, res) => {
+    let onnxPath;
+    let isCustom = false;
+    
+    if (customOnnxFile) {
+        if (path.isAbsolute(customOnnxFile)) {
+            onnxPath = customOnnxFile;
+        } else {
+            onnxPath = path.join(__dirname, customOnnxFile);
+        }
+        isCustom = true;
+    } else {
+        onnxPath = path.join(__dirname, 'public', 'dummy_dot_behavior.onnx');
+    }
+    
+    const exists = fs.existsSync(onnxPath);
+    const stats = exists ? fs.statSync(onnxPath) : null;
+    
+    res.json({
+        path: onnxPath,
+        filename: path.basename(onnxPath),
+        isCustom: isCustom,
+        exists: exists,
+        size: stats ? stats.size : null,
+        modified: stats ? stats.mtime : null
+    });
+});
+
 // Save game session data (called when game ends)
 app.post('/api/save-session', async (req, res) => {
     try {
@@ -398,12 +500,22 @@ app.post('/api/save-session', async (req, res) => {
         // Add server timestamp
         sessionData.serverTimestamp = Date.now();
         
-        // Stream directly to BigQuery (our only storage now)
-        await streamToBigQuery(sessionData);
-        
-        console.log(`Session ${sessionData.sessionUid} saved for user ${sessionData.userUid} with ${sessionData.mouseTrackingData.length} tracking points`);
-        
-        res.status(200).json({ success: true, message: 'Session data saved successfully' });
+        if (DISABLE_CLOUD) {
+            // In local mode, just log the session and return success
+            console.log(`[LOCAL MODE] Session ${sessionData.sessionUid} received for user ${sessionData.userUid} with ${sessionData.mouseTrackingData.length} tracking points`);
+            res.status(200).json({ 
+                success: true, 
+                message: 'Session data received (not saved - running in local mode)',
+                localMode: true
+            });
+        } else {
+            // Stream directly to BigQuery (our only storage now)
+            await streamToBigQuery(sessionData);
+            
+            console.log(`Session ${sessionData.sessionUid} saved for user ${sessionData.userUid} with ${sessionData.mouseTrackingData.length} tracking points`);
+            
+            res.status(200).json({ success: true, message: 'Session data saved successfully' });
+        }
         
     } catch (error) {
         console.error('Error saving session data:', error);
@@ -412,6 +524,14 @@ app.post('/api/save-session', async (req, res) => {
 });
 
 app.get('/api/download-dataset', async (req, res) => {
+    if (DISABLE_CLOUD) {
+        return res.status(503).json({ 
+            error: 'Dataset download requires cloud services', 
+            message: 'This feature is only available when running with Google Cloud access',
+            localMode: true
+        });
+    }
+
     try {
         const format = req.query.format || 'csv';
         const getUrl = req.query.url === 'true'; // Add ?url=true to get signed URL instead of direct download
@@ -493,6 +613,22 @@ server.listen(PORT, async () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🎮 Game available at: http://localhost:${PORT}`);
     console.log(`📊 Dataset page at: http://localhost:${PORT}/dataset`);
+    
+    // Show configuration
+    if (DISABLE_CLOUD) {
+        console.log('🔧 Running in LOCAL MODE - data will not be saved');
+        console.log('   To enable cloud services, remove DISABLE_CLOUD environment variable');
+    } else {
+        console.log('☁️ Running with CLOUD SERVICES enabled');
+    }
+    
+    if (customOnnxFile) {
+        console.log(`🤖 Using custom ONNX model: ${customOnnxFile}`);
+    } else {
+        console.log('🤖 Using default ONNX model');
+    }
+    
+    console.log(`🔗 ONNX model info: http://localhost:${PORT}/api/onnx-info`);
     
     // Initialize Google Cloud services
     await initializeCloudServices();
