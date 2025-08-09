@@ -133,19 +133,6 @@
             <p>This dataset contains mouse movement tracking data and game session information from the "Click the Moving Dot" game. Each record represents a single mouse position tracking event during gameplay.</p>
             
             <p><strong>Privacy Protection:</strong> All user and session identifiers have been anonymized with sequential integers (0, 1, 2, ...) to protect player privacy while maintaining data relationships.</p>
-            
-            <p><strong>Use Cases:</strong></p>
-            <ul>
-                <li>Training AI models to predict dot movement patterns</li>
-                <li>Analyzing user behavior and reaction times</li>
-                <li>Studying human-computer interaction patterns</li>
-                <li>Research on mouse tracking and motor skills</li>
-                <li>High-performance data analysis with columnar formats (Parquet/Feather)</li>
-            </ul>
-        </div>
-        
-        <div class="cache-info">
-            <strong>Note:</strong> The dataset is cached and updated once daily to ensure optimal performance. Downloads may include data up to 24 hours old.
         </div>
         
         <div class="download-section">
@@ -159,6 +146,10 @@
             <a href="/api/download-dataset?format=feather" class="download-btn feather" target="_blank">
                 Download Feather
             </a>
+        </div>
+
+        <div class="cache-info">
+            <strong>Note:</strong> The dataset is cached and updated once daily to ensure optimal performance. Downloads may include data up to 24 hours old.
         </div>
         
         <div class="data-schema">
@@ -241,9 +232,9 @@
                 <li><strong>Speed Progression:</strong> Each level increases max speed by 0.2 units</li>
                 <li><strong>File Formats:</strong> 
                     <ul>
-                        <li>CSV - Universal compatibility, human-readable. Contains core tracking data only (no session metadata)</li>
+                        <li>CSV - Universal compatibility, human-readable. Lack some columns.</li>
                         <li>Parquet - Columnar format, excellent compression and query performance. Contains all fields</li>
-                        <li>Feather - Arrow IPC format, fast read/write for Python/R. Use <code>pd.read_feather()</code> or <code>pd.read_ipc()</code>. Contains all fields</li>
+                        <li>Feather - Arrow IPC format, fast read/write for Python/R. Use <code>pd.read_feather()</code>. Contains all fields</li>
                     </ul>
                 </li>
             </ul>
