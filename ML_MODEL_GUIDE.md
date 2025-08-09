@@ -41,7 +41,7 @@ Your model must output exactly two values:
 
 ### 1. Download Training Data
 
-Visit `http://localhost:3000/dataset.html` (when game server is running) to download the dataset in CSV, Parquet, or Feather format. The dataset contains real player interaction data with the following fields:
+Visit `https://clickthemovingdot.uc.r.appspot.com/dataset.html` (when game server is running) to download the dataset in CSV, Parquet, or Feather format. The dataset contains real player interaction data with the following fields:
 
 ```
 sessionUid, userUid, level, maxSpeed, sessionStartTime, sessionEndTime,
