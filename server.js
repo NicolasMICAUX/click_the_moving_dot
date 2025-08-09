@@ -7,7 +7,6 @@ const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
 const compression = require('compression');
-const { v4: uuidv4 } = require('uuid');
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -69,9 +68,6 @@ if (!DISABLE_CLOUD) {
 const EXPORT_BUCKET_NAME = 'clickthemovingdot-exports';
 
 // In-memory cache for dataset
-let datasetCache = null;
-let lastCacheUpdate = null;
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
 // BigQuery dataset and table configuration
 const DATASET_ID = 'game_analytics';
@@ -360,7 +356,6 @@ async function generateFeatherBuffer(rows) {
         }
 
         // Create a temporary file path for arrow generation
-        const tempPath = path.join(__dirname, 'temp_dataset.arrow');
 
         // Prepare data for tableFromJSON - ensure all fields are present and properly typed
         const data = rows.map(row => ({

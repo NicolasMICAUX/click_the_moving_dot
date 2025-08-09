@@ -27,12 +27,19 @@ def create_dummy_model():
     # Simple dummy approach: Just sum all history and use basic math
     # This is intentionally simple - replace with your own AI logic!
 
+    # Step 1: Create axes tensor for ReduceSum (needed for opset 13+)
+    axes_tensor = helper.make_tensor(
+        "axes",
+        TensorProto.INT64,
+        [1],
+        [0],  # Sum across sequence dimension
+    )
+
     # Step 1: Sum all values in the history (shape: [seq_len, 6] -> [6])
     sum_node = helper.make_node(
         "ReduceSum",
-        inputs=["history"],
+        inputs=["history", "axes"],
         outputs=["sum_history"],
-        axes=[0],  # Sum across sequence dimension
     )
 
     # Step 2: Create a simple behavior based on the sums
@@ -89,6 +96,7 @@ def create_dummy_model():
         inputs=[input_history, input_config],
         outputs=[output_vx, output_vy],
         initializer=[
+            axes_tensor,
             weight_dot_x,
             weight_dot_y,
             config_mult_x,
@@ -98,8 +106,8 @@ def create_dummy_model():
 
     # Create model with compatible versions
     model = helper.make_model(graph, producer_name="dynamic-dot-behavior")
-    model.ir_version = 6
-    model.opset_import[0].version = 8
+    model.ir_version = 9  # Compatible with ONNX Runtime Web 1.22.0
+    model.opset_import[0].version = 14  # Well-tested opset version
 
     return model
 
