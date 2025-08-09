@@ -102,7 +102,6 @@
                 
                 // Dot movement state
                 this.dotVelocity = { x: 0, y: 0 };
-                this.noiseState = { x: 0, y: 0 }; // For correlated noise
                 
                 this.initializeGame();
                 this.setupEventListeners();
@@ -217,15 +216,8 @@
                 const config = { maxSpeed: this.maxSpeed };
                 const velocity = await this.dotAI.getDotVelocity(this.mouseTrackingData, config);
                 
-                // Apply smoothing and noise for natural movement
-                this.noiseState.x += (Math.random() - 0.5) * 0.1;
-                this.noiseState.y += (Math.random() - 0.5) * 0.1;
-                this.noiseState.x *= 0.9; // Decay factor
-                this.noiseState.y *= 0.9;
-                
-                // Add noise to AI velocity
-                const targetVx = velocity.targetVx + this.noiseState.x * 30;
-                const targetVy = velocity.targetVy + this.noiseState.y * 30;
+                const targetVx = velocity.targetVx;
+                const targetVy = velocity.targetVy;
                 
                 // Smooth velocity interpolation for natural movement
                 this.dotVelocity.x += (targetVx - this.dotVelocity.x) * 0.1;
@@ -270,7 +262,6 @@
                 // Reset dot position to center
                 this.dotPosition = { x: 400, y: 400 };
                 this.dotVelocity = { x: 0, y: 0 };
-                this.noiseState = { x: 0, y: 0 };
                 
                 // Start new session for this level
                 this.sessionUid = this.generateSessionUid();
