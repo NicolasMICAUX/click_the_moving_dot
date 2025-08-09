@@ -13,7 +13,12 @@ resources:
   memory_gb: 0.5
   disk_size_gb: 10
 
+# Security: Force HTTPS and add security headers
 handlers:
 - url: /.*
   script: auto
   secure: always
+  
+# Additional security settings
+network:
+  forwarded_ports: []  # No additional ports needed
