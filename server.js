@@ -414,6 +414,7 @@ app.post('/api/save-session', async (req, res) => {
 app.get('/api/download-dataset', async (req, res) => {
     try {
         const format = req.query.format || 'csv';
+        const getUrl = req.query.url === 'true'; // Add ?url=true to get signed URL instead of direct download
         
         if (!['csv', 'parquet', 'feather'].includes(format)) {
             return res.status(400).json({ error: 'Unsupported format. Use csv, parquet, or feather.' });
@@ -442,7 +443,28 @@ app.get('/api/download-dataset', async (req, res) => {
                 break;
         }
         
-        // Stream the file directly from Cloud Storage to the client
+        // If user wants a signed URL for curl/wget access
+        if (getUrl) {
+            const options = {
+                version: 'v4',
+                action: 'read',
+                expires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+                responseDisposition: `attachment; filename="${filename}"`,
+                responseType: contentType,
+            };
+            
+            const [signedUrl] = await file.getSignedUrl(options);
+            
+            return res.json({
+                signedUrl: signedUrl,
+                filename: filename,
+                format: format,
+                expires: new Date(options.expires).toISOString(),
+                curlExample: `curl -o "${filename}" "${signedUrl}"`
+            });
+        }
+        
+        // Otherwise, stream the file directly from Cloud Storage to the client
         res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         

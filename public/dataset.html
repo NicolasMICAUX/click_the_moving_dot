@@ -148,6 +148,25 @@
             </a>
         </div>
 
+        <div class="developer-section" style="background-color: #e8f4f8; padding: 20px; border-radius: 5px; margin: 20px 0;">
+            <h3>🔗 For Developers: curl/wget Access</h3>
+            <p>Get signed URLs for command-line downloads (valid for 24 hours):</p>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                <button onclick="getSignedUrl('csv')" class="download-btn" style="cursor: pointer; border: none;">
+                    Get CSV URL
+                </button>
+                <button onclick="getSignedUrl('parquet')" class="download-btn parquet" style="cursor: pointer; border: none;">
+                    Get Parquet URL
+                </button>
+                <button onclick="getSignedUrl('feather')" class="download-btn feather" style="cursor: pointer; border: none;">
+                    Get Feather URL
+                </button>
+            </div>
+            <div id="signedUrlResult" style="margin-top: 15px; font-family: monospace; background: #f8f9fa; padding: 15px; border-radius: 5px; display: none;">
+                <!-- Signed URL will appear here -->
+            </div>
+        </div>
+
         <div class="cache-info">
             <strong>Note:</strong> The dataset is cached and updated once daily to ensure optimal performance. Downloads may include data up to 24 hours old.
         </div>
@@ -240,5 +259,54 @@
             </ul>
         </div>
     </div>
+
+    <script>
+        async function getSignedUrl(format) {
+            const resultDiv = document.getElementById('signedUrlResult');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<em>Generating signed URL...</em>';
+            
+            try {
+                const response = await fetch(`/api/download-dataset?format=${format}&url=true`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <strong>Signed URL for ${format.toUpperCase()} (expires: ${new Date(data.expires).toLocaleString()}):</strong><br><br>
+                        <div style="word-break: break-all; background: white; padding: 10px; border: 1px solid #ddd; border-radius: 3px; margin: 10px 0;">
+                            ${data.signedUrl}
+                        </div>
+                        <strong>curl command:</strong><br>
+                        <div style="background: #2d3748; color: #68d391; padding: 10px; border-radius: 3px; margin: 10px 0; overflow-x: auto;">
+                            ${data.curlExample}
+                        </div>
+                        <button onclick="copyToClipboard('${data.signedUrl}')" style="background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+                            Copy URL
+                        </button>
+                        <button onclick="copyToClipboard('${data.curlExample}')" style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                            Copy curl Command
+                        </button>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<em style="color: red;">Error: ${data.error}</em>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<em style="color: red;">Failed to generate signed URL: ${error.message}</em>`;
+            }
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Show brief feedback
+                const originalText = event.target.textContent;
+                event.target.textContent = 'Copied!';
+                setTimeout(() => {
+                    event.target.textContent = originalText;
+                }, 1000);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+            });
+        }
+    </script>
 </body>
 </html>
