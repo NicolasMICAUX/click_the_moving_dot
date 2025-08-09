@@ -59,11 +59,13 @@ Each row represents a single mouse tracking event.
 - **LSTM/GRU**: Learn temporal patterns in mouse movement
 - **Transformer**: Attention-based sequence modeling
 
+- **Simple objective minimization**: trying to get as far as possible from the dot
 - **Reinforcement Learning**: Train an agent to maximize "escape time"
 
 ## 🔧 Implementation Examples
 
 ### PyTorch Implementation
+(A working example can be found in [train_demo_pytorch_lstm.py](train_demo_pytorch_lstm.py))
 
 ```python
 import torch

@@ -3,3 +3,5 @@ node_modules
 TODO.md
 .env
 service-account-key.json
+data
+public/pytorch_dot_behavior.onnx
