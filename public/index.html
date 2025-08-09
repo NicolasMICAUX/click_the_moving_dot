@@ -464,25 +464,29 @@
                 }
                 
                 try {
-                    console.log('Running ONNX model with history length:', history.length);
-                    // Prepare input tensors - use last 5 tracking points or pad with zeros
-                    const maxHistoryLength = 5;
-                    const flatHistory = new Array(maxHistoryLength * 5).fill(0);
+                    // For dynamic model: Use actual sequence length (no padding needed!)
+                    const MAX_SEQ_LEN = 20; // Still limit to reasonable size for performance
+                    const recentHistory = history.slice(-MAX_SEQ_LEN);
                     
-                    // Fill with recent history data (timestamp, dotX, dotY, mouseX, mouseY)
-                    const recentHistory = history.slice(-maxHistoryLength);
+                    // Create dynamic matrix [seq_len, 5] - actual length, no padding
+                    const seqLen = recentHistory.length;
+                    const historyMatrix = new Array(seqLen * 5);
+                    
+                    // Fill with actual data (all real data, no padding)
                     for (let i = 0; i < recentHistory.length; i++) {
                         const point = recentHistory[i];
                         const offset = i * 5;
-                        flatHistory[offset] = point.timestamp;
-                        flatHistory[offset + 1] = point.dotX;
-                        flatHistory[offset + 2] = point.dotY;
-                        flatHistory[offset + 3] = point.mouseX;
-                        flatHistory[offset + 4] = point.mouseY;
+                        historyMatrix[offset] = point.timestamp;
+                        historyMatrix[offset + 1] = point.dotX;
+                        historyMatrix[offset + 2] = point.dotY;
+                        historyMatrix[offset + 3] = point.mouseX;
+                        historyMatrix[offset + 4] = point.mouseY;
                     }
                     
+                    console.log(`🤖 AI processing ${seqLen} history points (dynamic length)`);
+                    
                     const input = {
-                        history: new ort.Tensor('float32', flatHistory, [1, maxHistoryLength * 5]),
+                        history: new ort.Tensor('float32', historyMatrix, [seqLen, 5]), // Dynamic shape!
                         config: new ort.Tensor('float32', [config.maxSpeed], [1])
                     };
                     

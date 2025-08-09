@@ -1,54 +1,112 @@
 #!/usr/bin/env python3
 """
-Create a very simple ONNX model with explicit version control.
+Create a simple dummy ONNX model with dynamic sequence length [seq_len, 5].
+This is a minimal example that demonstrates variable-length input sequences
+with basic mathematical operations - perfect for swapping in more sophisticated AI models.
 """
 
 import onnx
 from onnx import TensorProto, helper
 
 
-def main():
-    # Define inputs
-    input_history = helper.make_tensor_value_info("history", TensorProto.FLOAT, [1, 25])
+def create_dummy_model():
+    """Create a simple dummy model that handles variable sequence lengths - easy to replace with real AI!"""
+
+    # Define inputs with dynamic sequence length
+    # history: [seq_len, 5] where seq_len can vary
+    input_history = helper.make_tensor_value_info(
+        "history", TensorProto.FLOAT, [None, 5]
+    )
     input_config = helper.make_tensor_value_info("config", TensorProto.FLOAT, [1])
 
     # Define outputs
     output_vx = helper.make_tensor_value_info("targetVx", TensorProto.FLOAT, [1])
     output_vy = helper.make_tensor_value_info("targetVy", TensorProto.FLOAT, [1])
 
-    # Create constant outputs (30.0, -30.0)
-    vx_node = helper.make_node(
-        "Constant",
-        inputs=[],
-        outputs=["targetVx"],
-        value=helper.make_tensor(
-            name="vx_value", data_type=TensorProto.FLOAT, dims=[1], vals=[30.0]
-        ),
+    # Simple dummy approach: Just sum all history and use basic math
+    # This is intentionally simple - replace with your own AI logic!
+
+    # Step 1: Sum all values in the history (shape: [seq_len, 5] -> [5])
+    sum_node = helper.make_node(
+        "ReduceSum",
+        inputs=["history"],
+        outputs=["sum_history"],
+        axes=[0],  # Sum across sequence dimension
     )
 
+    # Step 2: Create a simple behavior based on the sums
+    # Use mathematical operations that work well in opset 8
+
+    # Extract some values by multiplying with weights
+    weight_dot_x = helper.make_tensor(
+        "weight_dot_x", TensorProto.FLOAT, [5], [0.0, 0.1, 0.0, -0.1, 0.0]
+    )
+    weight_dot_y = helper.make_tensor(
+        "weight_dot_y", TensorProto.FLOAT, [5], [0.0, 0.0, 0.1, 0.0, -0.1]
+    )
+
+    # Calculate weighted sums (this simulates extracting relevant features)
+    dot_influence_x = helper.make_node(
+        "MatMul", inputs=["sum_history", "weight_dot_x"], outputs=["influence_x"]
+    )
+    dot_influence_y = helper.make_node(
+        "MatMul", inputs=["sum_history", "weight_dot_y"], outputs=["influence_y"]
+    )
+
+    # Scale by config and add some simple dynamics
+    config_mult_x = helper.make_tensor("config_mult_x", TensorProto.FLOAT, [], [30.0])
+    config_mult_y = helper.make_tensor("config_mult_y", TensorProto.FLOAT, [], [25.0])
+
+    # Apply config scaling
+    scale_x_node = helper.make_node(
+        "Mul", inputs=["config", "config_mult_x"], outputs=["scale_x"]
+    )
+    scale_y_node = helper.make_node(
+        "Mul", inputs=["config", "config_mult_y"], outputs=["scale_y"]
+    )
+
+    # Final velocities with scaling
+    vx_node = helper.make_node(
+        "Mul", inputs=["influence_x", "scale_x"], outputs=["targetVx"]
+    )
     vy_node = helper.make_node(
-        "Constant",
-        inputs=[],
-        outputs=["targetVy"],
-        value=helper.make_tensor(
-            name="vy_value", data_type=TensorProto.FLOAT, dims=[1], vals=[-30.0]
-        ),
+        "Mul", inputs=["influence_y", "scale_y"], outputs=["targetVy"]
     )
 
     # Create the graph
     graph = helper.make_graph(
-        nodes=[vx_node, vy_node],
-        name="SimpleDotBehavior",
+        nodes=[
+            sum_node,
+            dot_influence_x,
+            dot_influence_y,
+            scale_x_node,
+            scale_y_node,
+            vx_node,
+            vy_node,
+        ],
+        name="DummyDotBehavior",
         inputs=[input_history, input_config],
         outputs=[output_vx, output_vy],
+        initializer=[
+            weight_dot_x,
+            weight_dot_y,
+            config_mult_x,
+            config_mult_y,
+        ],
     )
 
-    # Create the model with explicit version settings
-    model = helper.make_model(graph, producer_name="click-the-dot")
-
-    # Force IR version to be compatible with ONNX Runtime Web 1.14.0
-    model.ir_version = 6  # This is critical!
+    # Create model with compatible versions
+    model = helper.make_model(graph, producer_name="dynamic-dot-behavior")
+    model.ir_version = 6
     model.opset_import[0].version = 8
+
+    return model
+
+
+def main():
+    print("Creating simple dummy ONNX model with dynamic sequence length...")
+
+    model = create_dummy_model()
 
     print(f"Model IR version: {model.ir_version}")
     print(f"Model opset version: {model.opset_import[0].version}")
@@ -64,7 +122,9 @@ def main():
     # Save
     output_path = "public/dummy_dot_behavior.onnx"
     onnx.save(model, output_path)
-    print(f"✅ Saved model to: {output_path}")
+    print(f"✅ Saved dummy model to: {output_path}")
+    print("\nThis dummy model accepts variable sequence lengths [seq_len, 5]")
+    print("Replace this file with your own AI model to change dot behavior!")
 
 
 if __name__ == "__main__":
