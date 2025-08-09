@@ -38,6 +38,8 @@ npm start
 npm run start:onnx -- --onnx=path/to/your/model.onnx
 ```
 
+See [ML MODEL GUIDE](ML_MODEL_GUIDE.md) on how to train and export your own models.
+
 ## Game Mechanics
 
 - **Arena**: 800x800 pixel playing field
@@ -66,6 +68,7 @@ npm run start:onnx -- --onnx=path/to/your/model.onnx
 | timestamp | Timestamp | Mouse tracking timestamp |
 | dotX, dotY | Float | Dot coordinates (0-800) |
 | mouseX, mouseY | Float | Mouse coordinates (0-800) |
+| mouseDown | Boolean | Whether mouse button was pressed |
 
 ## Environment Configuration
 

@@ -93,6 +93,7 @@
                 this.maxSpeed = 0.5; // Base speed
                 this.dotPosition = { x: 400, y: 400 };
                 this.mousePosition = { x: 0, y: 0 };
+                this.mouseDown = false; // Track mousedown state
                 this.dotRadius = 15;
                 this.mouseTrackingData = [];
                 this.sessionStartTime = Date.now();
@@ -163,16 +164,31 @@
                     this.recordMouseTracking();
                 });
                 
-                    // Mousedown handling (more responsive than click)
-                    this.canvas.addEventListener('mousedown', (e) => {
-                        const rect = this.canvas.getBoundingClientRect();
-                        const clickX = e.clientX - rect.left;
-                        const clickY = e.clientY - rect.top;
+                // Mousedown event tracking
+                this.canvas.addEventListener('mousedown', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left;
+                    const clickY = e.clientY - rect.top;
                     
-                        if (this.checkCollision(clickX, clickY)) {
-                            this.levelUp();
-                        }
-                    });
+                    this.mouseDown = true;
+                    this.recordMouseTracking(); // Record mousedown state change
+                    
+                    if (this.checkCollision(clickX, clickY)) {
+                        this.levelUp();
+                    }
+                });
+                
+                // Mouseup event tracking
+                this.canvas.addEventListener('mouseup', (e) => {
+                    this.mouseDown = false;
+                    this.recordMouseTracking(); // Record mouseup state change
+                });
+                
+                // Handle mouse leaving canvas (treat as mouseup)
+                this.canvas.addEventListener('mouseleave', (e) => {
+                    this.mouseDown = false;
+                    this.recordMouseTracking(); // Record mouse leave as mouseup
+                });
             }
             
             // TODO: isn't this a bit too much saving?
@@ -204,7 +220,8 @@
                     dotX: this.dotPosition.x,
                     dotY: this.dotPosition.y,
                     mouseX: this.mousePosition.x,
-                    mouseY: this.mousePosition.y
+                    mouseY: this.mousePosition.y,
+                    mouseDown: this.mouseDown
                 });
             }
             
@@ -471,23 +488,24 @@
                     const MAX_SEQ_LEN = 20; // Still limit to reasonable size for performance
                     const recentHistory = history.slice(-MAX_SEQ_LEN);
                     
-                    // Create dynamic matrix [seq_len, 5] - actual length, no padding
+                    // Create dynamic matrix [seq_len, 6] - actual length, no padding
                     const seqLen = recentHistory.length;
-                    const historyMatrix = new Array(seqLen * 5);
+                    const historyMatrix = new Array(seqLen * 6);
                     
                     // Fill with actual data (all real data, no padding)
                     for (let i = 0; i < recentHistory.length; i++) {
                         const point = recentHistory[i];
-                        const offset = i * 5;
+                        const offset = i * 6;
                         historyMatrix[offset] = point.timestamp;
                         historyMatrix[offset + 1] = point.dotX;
                         historyMatrix[offset + 2] = point.dotY;
                         historyMatrix[offset + 3] = point.mouseX;
                         historyMatrix[offset + 4] = point.mouseY;
+                        historyMatrix[offset + 5] = point.mouseDown ? 1.0 : 0.0; // Convert boolean to float
                     }
                                         
                     const input = {
-                        history: new ort.Tensor('float32', historyMatrix, [seqLen, 5]), // Dynamic shape!
+                        history: new ort.Tensor('float32', historyMatrix, [seqLen, 6]), // Dynamic shape with 6 features!
                         config: new ort.Tensor('float32', [config.maxSpeed], [1])
                     };
                     

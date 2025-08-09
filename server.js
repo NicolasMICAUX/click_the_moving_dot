@@ -110,6 +110,7 @@ async function initializeCloudServices() {
                 { name: 'dotY', type: 'FLOAT', mode: 'REQUIRED' },
                 { name: 'mouseX', type: 'FLOAT', mode: 'REQUIRED' },
                 { name: 'mouseY', type: 'FLOAT', mode: 'REQUIRED' },
+                { name: 'mouseDown', type: 'BOOLEAN', mode: 'REQUIRED' },
             ];
             
             await table.create({ schema });
@@ -158,6 +159,7 @@ async function streamToBigQuery(sessionData) {
             dotY: trackingPoint.dotY,
             mouseX: trackingPoint.mouseX,
             mouseY: trackingPoint.mouseY,
+            mouseDown: trackingPoint.mouseDown || false,
         }));
         
         await table.insert(rows);
@@ -211,7 +213,8 @@ async function generateAndCacheDataset() {
                 dotX,
                 dotY,
                 mouseX,
-                mouseY
+                mouseY,
+                mouseDown
             FROM \`${projectId}.${DATASET_ID}.${TABLE_ID}\`
             ORDER BY timestamp DESC
         `;
@@ -222,9 +225,9 @@ async function generateAndCacheDataset() {
         const anonymizedRows = anonymizeData(rows);
         
         // Generate CSV (without sessionStartTime, sessionEndTime, and level)
-        const csvHeader = 'sessionUid,userUid,maxSpeed,timestamp,dotX,dotY,mouseX,mouseY\n';
+        const csvHeader = 'sessionUid,userUid,maxSpeed,timestamp,dotX,dotY,mouseX,mouseY,mouseDown\n';
         const csvRows = anonymizedRows.map(row => 
-            `${row.sessionUid},${row.userUid},${row.maxSpeed},${row.timestamp},${row.dotX},${row.dotY},${row.mouseX},${row.mouseY}`
+            `${row.sessionUid},${row.userUid},${row.maxSpeed},${row.timestamp},${row.dotX},${row.dotY},${row.mouseX},${row.mouseY},${row.mouseDown}`
         ).join('\n');
         const csv = csvHeader + csvRows;
         
@@ -308,7 +311,8 @@ async function generateParquetBuffer(rows) {
             dotX: { type: 'DOUBLE' },
             dotY: { type: 'DOUBLE' },
             mouseX: { type: 'DOUBLE' },
-            mouseY: { type: 'DOUBLE' }
+            mouseY: { type: 'DOUBLE' },
+            mouseDown: { type: 'BOOLEAN' }
         });
 
         // Create a temporary file path for parquet generation
@@ -328,7 +332,8 @@ async function generateParquetBuffer(rows) {
                 dotX: row.dotX,
                 dotY: row.dotY,
                 mouseX: row.mouseX,
-                mouseY: row.mouseY
+                mouseY: row.mouseY,
+                mouseDown: row.mouseDown || false
             });
         }
 
@@ -369,7 +374,8 @@ async function generateFeatherBuffer(rows) {
             dotX: parseFloat(row.dotX) || 0.0,
             dotY: parseFloat(row.dotY) || 0.0,
             mouseX: parseFloat(row.mouseX) || 0.0,
-            mouseY: parseFloat(row.mouseY) || 0.0
+            mouseY: parseFloat(row.mouseY) || 0.0,
+            mouseDown: Boolean(row.mouseDown)
         }));
 
         console.log(`Creating Feather file with ${data.length} rows`);

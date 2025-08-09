@@ -13,9 +13,10 @@ def create_dummy_model():
     """Create a simple dummy model that handles variable sequence lengths - easy to replace with real AI!"""
 
     # Define inputs with dynamic sequence length
-    # history: [seq_len, 5] where seq_len can vary
+    # history: [seq_len, 6] where seq_len can vary
+    # Field order: timestamp, dotX, dotY, mouseX, mouseY, mouseDown
     input_history = helper.make_tensor_value_info(
-        "history", TensorProto.FLOAT, [None, 5]
+        "history", TensorProto.FLOAT, [None, 6]
     )
     input_config = helper.make_tensor_value_info("config", TensorProto.FLOAT, [1])
 
@@ -26,7 +27,7 @@ def create_dummy_model():
     # Simple dummy approach: Just sum all history and use basic math
     # This is intentionally simple - replace with your own AI logic!
 
-    # Step 1: Sum all values in the history (shape: [seq_len, 5] -> [5])
+    # Step 1: Sum all values in the history (shape: [seq_len, 6] -> [6])
     sum_node = helper.make_node(
         "ReduceSum",
         inputs=["history"],
@@ -37,12 +38,12 @@ def create_dummy_model():
     # Step 2: Create a simple behavior based on the sums
     # Use mathematical operations that work well in opset 8
 
-    # Extract some values by multiplying with weights
+    # Extract some values by multiplying with weights (updated for 6 features)
     weight_dot_x = helper.make_tensor(
-        "weight_dot_x", TensorProto.FLOAT, [5], [0.0, 0.1, 0.0, -0.1, 0.0]
+        "weight_dot_x", TensorProto.FLOAT, [6], [0.0, 0.1, 0.0, -0.1, 0.0, 0.05]
     )
     weight_dot_y = helper.make_tensor(
-        "weight_dot_y", TensorProto.FLOAT, [5], [0.0, 0.0, 0.1, 0.0, -0.1]
+        "weight_dot_y", TensorProto.FLOAT, [6], [0.0, 0.0, 0.1, 0.0, -0.1, 0.05]
     )
 
     # Calculate weighted sums (this simulates extracting relevant features)
@@ -123,7 +124,8 @@ def main():
     output_path = "public/dummy_dot_behavior.onnx"
     onnx.save(model, output_path)
     print(f"✅ Saved dummy model to: {output_path}")
-    print("\nThis dummy model accepts variable sequence lengths [seq_len, 5]")
+    print("\nThis dummy model accepts variable sequence lengths [seq_len, 6]")
+    print("Field order: timestamp, dotX, dotY, mouseX, mouseY, mouseDown")
     print("Replace this file with your own AI model to change dot behavior!")
 
 

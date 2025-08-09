@@ -12,14 +12,17 @@ The game tracks mouse movements and the dot's position in real-time. Your ML mod
 
 Your model receives two inputs:
 
-1. **`history`** - A dynamic sequence tensor `[seq_len, 5]` containing recent game state:
+1. **`history`** - A dynamic sequence tensor `[seq_len, 6]` containing recent game state:
    - `history[i][0]` - Timestamp (milliseconds)
    - `history[i][1]` - Dot X position (0-800 pixels)
    - `history[i][2]` - Dot Y position (0-800 pixels) 
    - `history[i][3]` - Mouse X position (0-800 pixels)
    - `history[i][4]` - Mouse Y position (0-800 pixels)
+   - `history[i][5]` - Mouse down state (1.0 if mouse button pressed, 0.0 otherwise)
 
 History is ordered chronologically: history[0] is the oldest (earliest timestamp) and history[seq_len-1] is the most recent sample.
+
+You can reconstruct win events (when the user manages to click the dot), by checking if mouse down events are done when mouse X/Y is within the dot radius (15 pixels) of the dot X/Y center.
 
 2. **`config`** - A single float `[1]` containing the maximum allowed speed for current level. Probably the AI behavior to escape the user would be different if it can move fast or only slow.
 
@@ -45,7 +48,7 @@ Visit `https://clickthemovingdot.uc.r.appspot.com/dataset.html` (when game serve
 
 ```
 sessionUid, userUid, level, maxSpeed, sessionStartTime, sessionEndTime,
-timestamp, dotX, dotY, mouseX, mouseY
+timestamp, dotX, dotY, mouseX, mouseY, mouseDown
 ```
 
 Each row represents a single mouse tracking event.
@@ -70,11 +73,11 @@ import torch.onnx
 class DotBehaviorModel(nn.Module):
     def __init__(self, hidden_size=64):
         super().__init__()
-        self.lstm = nn.LSTM(5, hidden_size, batch_first=True)
+        self.lstm = nn.LSTM(6, hidden_size, batch_first=True)  # 6 input features now
         self.velocity_head = nn.Linear(hidden_size + 1, 2)  # +1 for config
         
     def forward(self, history, config):
-        # history: [batch_size, seq_len, 5]
+        # history: [batch_size, seq_len, 6]
         # config: [batch_size, 1]
         
         lstm_out, _ = self.lstm(history)
@@ -94,7 +97,7 @@ criterion = nn.MSELoss()
 # ... training loop ...
 
 # Export to ONNX
-dummy_history = torch.randn(1, 10, 5)  # Example sequence
+dummy_history = torch.randn(1, 10, 6)  # Example sequence with 6 features
 dummy_config = torch.randn(1, 1)
 
 torch.onnx.export(
@@ -119,7 +122,7 @@ import tf2onnx
 # Create model
 def create_model():
     # Define inputs
-    history_input = tf.keras.Input(shape=(None, 5), name="history")  # Dynamic sequence
+    history_input = tf.keras.Input(shape=(None, 6), name="history")  # Dynamic sequence with 6 features
     config_input = tf.keras.Input(shape=(1,), name="config")
     
     # LSTM processing
@@ -148,7 +151,7 @@ model.compile(optimizer='adam', loss='mse')
 
 # Export to ONNX
 spec = (
-    tf.TensorSpec((None, None, 5), tf.float32, name="history"),
+    tf.TensorSpec((None, None, 6), tf.float32, name="history"),  # 6 features
     tf.TensorSpec((None, 1), tf.float32, name="config")
 )
 
@@ -175,7 +178,7 @@ from skl2onnx.common.data_types import FloatTensorType
 def extract_features(history_seq, config_val):
     """Convert sequence to fixed-size features"""
     if len(history_seq) == 0:
-        return np.zeros(15)  # 15 features + config
+        return np.zeros(16)  # 16 features + config
     
     recent = history_seq[-5:]  # Last 5 points
     
@@ -187,7 +190,8 @@ def extract_features(history_seq, config_val):
     features.extend([
         last_point[1] - last_point[3],  # dx (dot - mouse)
         last_point[2] - last_point[4],  # dy (dot - mouse)
-        np.sqrt((last_point[1] - last_point[3])**2 + (last_point[2] - last_point[4])**2)  # distance
+        np.sqrt((last_point[1] - last_point[3])**2 + (last_point[2] - last_point[4])**2),  # distance
+        last_point[5]  # mouseDown state
     ])
     
     # Movement features
@@ -207,11 +211,18 @@ def extract_features(history_seq, config_val):
         np.std(mouse_positions[:, 1]),   # std mouse y
     ])
     
-    # Pad to 15 features
-    while len(features) < 15:
+    # MouseDown statistics
+    mousedown_states = np.array([p[5] for p in recent])
+    features.extend([
+        np.mean(mousedown_states),  # fraction of time mouse was down
+        np.sum(mousedown_states),   # total mousedown events
+    ])
+    
+    # Pad to 16 features
+    while len(features) < 16:
         features.append(0)
     
-    return np.array(features[:15])
+    return np.array(features[:16])
 
 # Create pipeline
 pipeline = Pipeline([
@@ -224,7 +235,7 @@ pipeline = Pipeline([
 # pipeline.fit(X_train, y_train)
 
 # Convert to ONNX
-initial_type = [('float_input', FloatTensorType([None, 15]))]
+initial_type = [('float_input', FloatTensorType([None, 16]))]  # Updated to 16 features
 onnx_model = convert_sklearn(
     pipeline, 
     initial_types=initial_type,
@@ -330,7 +341,7 @@ print("Output names:", [output.name for output in session.get_outputs()])
 
 # Test with dummy data
 import numpy as np
-dummy_history = np.random.randn(1, 10, 5).astype(np.float32)
+dummy_history = np.random.randn(1, 10, 6).astype(np.float32)  # 6 features
 dummy_config = np.array([[1.0]], dtype=np.float32)
 
 result = session.run(None, {
