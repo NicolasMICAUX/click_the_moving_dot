@@ -216,8 +216,21 @@
                 const config = { maxSpeed: this.maxSpeed };
                 const velocity = await this.dotAI.getDotVelocity(this.mouseTrackingData, config);
                 
-                const targetVx = velocity.targetVx;
-                const targetVy = velocity.targetVy;
+                let targetVx = velocity.targetVx;
+                let targetVy = velocity.targetVy;
+
+                // Clip target velocity magnitude to maxSpeed (converted to px/s)
+                const maxPixelSpeed = this.maxSpeed * 100;
+                console.log(targetVx, targetVy, maxPixelSpeed);
+                let mag = Math.hypot(targetVx, targetVy);
+                if (!isFinite(mag) || mag === 0) {
+                    targetVx = 0;
+                    targetVy = 0;
+                } else if (mag > maxPixelSpeed) {
+                    const scale = maxPixelSpeed / mag;
+                    targetVx *= scale;
+                    targetVy *= scale;
+                }
                 
                 // Smooth velocity interpolation for natural movement
                 this.dotVelocity.x += (targetVx - this.dotVelocity.x) * 0.1;
