@@ -4,6 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Click the Moving Dot</title>
+    <!-- ONNX Runtime Web for AI model support -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.14.0/dist/ort.min.js"></script>
+    <script>
+        // Configure ONNX Runtime to use CPU only and avoid WebGPU issues
+        if (typeof ort !== 'undefined') {
+            // Disable WebGPU and WebGL execution providers that might cause issues
+            ort.env.wasm.numThreads = 1;
+            ort.env.wasm.simd = false; // Disable SIMD to avoid compatibility issues
+            ort.env.logLevel = 'warning'; // Reduce log noise
+            console.log('ONNX Runtime configured for CPU execution');
+        }
+    </script>
     <style>
         body {
             margin: 0;
@@ -30,6 +42,7 @@
         
         .level { color: #007bff; }
         .speed { color: #28a745; }
+        .ai-status { color: #6f42c1; }
         .user-id { color: #6c757d; font-size: 12px; }
         
         #gameArena {
@@ -53,6 +66,7 @@
     <div class="game-info">
         <div class="level">Level: <span id="levelDisplay">1</span></div>
         <div class="speed">Speed: <span id="speedDisplay">1.0</span></div>
+        <div class="ai-status">AI: <span id="aiStatus">Loading...</span></div>
     </div>
     
     <canvas id="gameArena" width="800" height="800"></canvas>
@@ -68,6 +82,11 @@
             constructor() {
                 this.canvas = document.getElementById('gameArena');
                 this.ctx = this.canvas.getContext('2d');
+                
+                // Initialize AI model
+                this.dotAI = new DotAI();
+                this.loadAIModel(); // Load model asynchronously
+                
                 this.userUid = this.getUserUid();
                 this.sessionUid = this.generateSessionUid();
                 this.level = 1;
@@ -108,6 +127,30 @@
                 document.getElementById('userIdDisplay').textContent = this.userUid;
                 this.updateUI();
                 this.drawGame();
+            }
+            
+            async loadAIModel() {
+                // Try to load the AI model, fallback to default behavior if it fails
+                console.log('Attempting to load AI model...');
+                document.getElementById('aiStatus').textContent = 'Loading...';
+                
+                try {
+                    const modelLoaded = await this.dotAI.loadModel('/dummy_dot_behavior.onnx');
+                    if (modelLoaded) {
+                        console.log('✅ AI model loaded successfully - using AI for dot behavior');
+                        document.getElementById('aiStatus').textContent = 'Enabled';
+                        document.getElementById('aiStatus').style.color = '#28a745';
+                    } else {
+                        console.log('❌ AI model not available - using default behavior');
+                        document.getElementById('aiStatus').textContent = 'Disabled (Default)';
+                        document.getElementById('aiStatus').style.color = '#dc3545';
+                    }
+                } catch (error) {
+                    console.error('❌ Error loading AI model:', error);
+                    console.log('Falling back to default behavior');
+                    document.getElementById('aiStatus').textContent = 'Disabled (Error)';
+                    document.getElementById('aiStatus').style.color = '#dc3545';
+                }
             }
             
             setupEventListeners() {
@@ -166,54 +209,46 @@
                 });
             }
             
-            updateDotPosition() {
+            async updateDotPosition() {
                 const now = Date.now();
                 const deltaTime = (now - this.lastUpdateTime) / 1000; // Convert to seconds
                 
-                // Calculate escape vector (dot moves away from mouse)
-                const dx = this.dotPosition.x - this.mousePosition.x;
-                const dy = this.dotPosition.y - this.mousePosition.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
+                // Use AI model or fallback to default behavior
+                const config = { maxSpeed: this.maxSpeed };
+                const velocity = await this.dotAI.getDotVelocity(this.mouseTrackingData, config);
                 
-                if (distance > 0) {
-                    // Normalize escape direction
-                    const normalizedDx = dx / distance;
-                    const normalizedDy = dy / distance;
-                    
-                    // Add correlated random noise that changes smoothly over time
-                    this.noiseState.x += (Math.random() - 0.5) * 0.1;
-                    this.noiseState.y += (Math.random() - 0.5) * 0.1;
-                    this.noiseState.x *= 0.9; // Decay factor
-                    this.noiseState.y *= 0.9;
-                    
-                    // Calculate target velocity
-                    const speed = this.maxSpeed * 100; // pixels per second
-                    const targetVx = (normalizedDx + this.noiseState.x * 0.3) * speed;
-                    const targetVy = (normalizedDy + this.noiseState.y * 0.3) * speed;
-                    
-                    // Smooth velocity interpolation for natural movement
-                    this.dotVelocity.x += (targetVx - this.dotVelocity.x) * 0.1;
-                    this.dotVelocity.y += (targetVy - this.dotVelocity.y) * 0.1;
-                    
-                    // Update position
-                    let newX = this.dotPosition.x + this.dotVelocity.x * deltaTime;
-                    let newY = this.dotPosition.y + this.dotVelocity.y * deltaTime;
-                    
-                    // Keep dot within arena bounds
-                    newX = Math.max(this.dotRadius, Math.min(800 - this.dotRadius, newX));
-                    newY = Math.max(this.dotRadius, Math.min(800 - this.dotRadius, newY));
-                    
-                    // Bounce off walls
-                    if (newX <= this.dotRadius || newX >= 800 - this.dotRadius) {
-                        this.dotVelocity.x *= -0.5;
-                    }
-                    if (newY <= this.dotRadius || newY >= 800 - this.dotRadius) {
-                        this.dotVelocity.y *= -0.5;
-                    }
-                    
-                    this.dotPosition.x = newX;
-                    this.dotPosition.y = newY;
+                // Apply smoothing and noise for natural movement
+                this.noiseState.x += (Math.random() - 0.5) * 0.1;
+                this.noiseState.y += (Math.random() - 0.5) * 0.1;
+                this.noiseState.x *= 0.9; // Decay factor
+                this.noiseState.y *= 0.9;
+                
+                // Add noise to AI velocity
+                const targetVx = velocity.targetVx + this.noiseState.x * 30;
+                const targetVy = velocity.targetVy + this.noiseState.y * 30;
+                
+                // Smooth velocity interpolation for natural movement
+                this.dotVelocity.x += (targetVx - this.dotVelocity.x) * 0.1;
+                this.dotVelocity.y += (targetVy - this.dotVelocity.y) * 0.1;
+                
+                // Update position
+                let newX = this.dotPosition.x + this.dotVelocity.x * deltaTime;
+                let newY = this.dotPosition.y + this.dotVelocity.y * deltaTime;
+                
+                // Keep dot within arena bounds
+                newX = Math.max(this.dotRadius, Math.min(800 - this.dotRadius, newX));
+                newY = Math.max(this.dotRadius, Math.min(800 - this.dotRadius, newY));
+                
+                // Bounce off walls
+                if (newX <= this.dotRadius || newX >= 800 - this.dotRadius) {
+                    this.dotVelocity.x *= -0.5;
                 }
+                if (newY <= this.dotRadius || newY >= 800 - this.dotRadius) {
+                    this.dotVelocity.y *= -0.5;
+                }
+                
+                this.dotPosition.x = newX;
+                this.dotPosition.y = newY;
                 
                 this.lastUpdateTime = now;
             }
@@ -367,6 +402,117 @@
                 this.ctx.strokeStyle = `rgba(255, 193, 7, ${Math.min(this.maxSpeed / 2, 1)})`;
                 this.ctx.lineWidth = 2;
                 this.ctx.stroke();
+            }
+        }
+        
+        // ONNX.js AI Model Integration
+        class DotAI {
+            constructor() {
+                this.session = null;
+                this.isLoaded = false;
+                this.forceDisableAI = false; // Set to true to test without ONNX
+            }
+            
+            async loadModel(modelPath) {
+                if (this.forceDisableAI) {
+                    console.log('🚫 AI disabled by flag - using default behavior');
+                    return false;
+                }
+                
+                try {
+                    console.log('🔄 Loading ONNX model from:', modelPath);
+                    
+                    // Check if ort is available
+                    if (typeof ort === 'undefined') {
+                        throw new Error('ONNX Runtime not available - ort is undefined');
+                    }
+                    
+                    // Configure ONNX Runtime to use CPU execution provider
+                    // This avoids WebGPU issues - use minimal options
+                    const sessionOptions = {
+                        executionProviders: ['cpu']
+                    };
+                    
+                    // Fetch the model to check if it exists
+                    const response = await fetch(modelPath);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch model: ${response.status} ${response.statusText}`);
+                    }
+                    
+                    console.log('📁 Model file fetched successfully, creating session with CPU provider...');
+                    this.session = await ort.InferenceSession.create(modelPath, sessionOptions);
+                    this.isLoaded = true;
+                    
+                    // Log model info
+                    console.log('📊 Model inputs:', Object.keys(this.session.inputNames));
+                    console.log('📊 Model outputs:', Object.keys(this.session.outputNames));
+                    
+                    console.log('✅ ONNX model loaded successfully');
+                    return true;
+                } catch (error) {
+                    console.error('❌ Failed to load ONNX model:', error.message);
+                    console.error('Full error:', error);
+                    this.isLoaded = false;
+                    return false;
+                }
+            }
+            
+            async getDotVelocity(history, config) {
+                if (!this.isLoaded || !this.session) {
+                    // Fallback to default behavior
+                    return this.defaultDotBehavior(history, config);
+                }
+                
+                try {
+                    console.log('Running ONNX model with history length:', history.length);
+                    // Prepare input tensors - use last 5 tracking points or pad with zeros
+                    const maxHistoryLength = 5;
+                    const flatHistory = new Array(maxHistoryLength * 5).fill(0);
+                    
+                    // Fill with recent history data (timestamp, dotX, dotY, mouseX, mouseY)
+                    const recentHistory = history.slice(-maxHistoryLength);
+                    for (let i = 0; i < recentHistory.length; i++) {
+                        const point = recentHistory[i];
+                        const offset = i * 5;
+                        flatHistory[offset] = point.timestamp;
+                        flatHistory[offset + 1] = point.dotX;
+                        flatHistory[offset + 2] = point.dotY;
+                        flatHistory[offset + 3] = point.mouseX;
+                        flatHistory[offset + 4] = point.mouseY;
+                    }
+                    
+                    const input = {
+                        history: new ort.Tensor('float32', flatHistory, [1, maxHistoryLength * 5]),
+                        config: new ort.Tensor('float32', [config.maxSpeed], [1])
+                    };
+                    
+                    const output = await this.session.run(input);
+                    
+                    return {
+                        targetVx: output.targetVx.data[0],
+                        targetVy: output.targetVy.data[0]
+                    };
+                } catch (error) {
+                    console.error('Error running ONNX model:', error);
+                    // Fallback to default behavior
+                    return this.defaultDotBehavior(history, config);
+                }
+            }
+            
+            // Default behavior as fallback
+            defaultDotBehavior(history, config) {
+                const latest = history[history.length - 1];
+                if (!latest) return { targetVx: 0, targetVy: 0 };
+                
+                const dx = latest.dotX - latest.mouseX;
+                const dy = latest.dotY - latest.mouseY;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                const speed = config.maxSpeed || 1;
+                
+                return {
+                    targetVx: (dx / dist) * speed * 100, // Convert to pixels per second
+                    targetVy: (dy / dist) * speed * 100
+                };
             }
         }
         
