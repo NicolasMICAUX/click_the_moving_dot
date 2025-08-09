@@ -146,7 +146,7 @@ async function generateAndCacheDataset() {
         const [featherExists] = await featherFile.exists();
         
         // Force regeneration for debugging - remove this line later
-        const forceRegenerate = true;
+        const forceRegenerate = false;
         
         if (csvExists && parquetExists && featherExists && !forceRegenerate) {
             console.log(`Using cached dataset for ${today}`);
@@ -215,7 +215,7 @@ async function generateAndCacheDataset() {
         
         console.log(`Dataset cached to Cloud Storage: ${rows.length} records`);
         
-        // Clean up old exports (keep only last 7 days)
+        // Clean up old exports (keep only last 2 days)
         await cleanupOldExports(bucket);
         
         return { csvFile, parquetFile, featherFile };
