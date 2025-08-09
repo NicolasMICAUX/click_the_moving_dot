@@ -4,11 +4,14 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
 const compression = require('compression');
 const { v4: uuidv4 } = require('uuid');
 const { BigQuery } = require('@google-cloud/bigquery');
 const { Storage } = require('@google-cloud/storage');
+const { ParquetWriter, ParquetSchema } = require('parquetjs-lite');
+const { Table, Schema, Field, Float64, Int32, Int64, Utf8, TimestampMillisecond, tableToIPC, RecordBatch, tableFromJSON, vectorFromArray, tableFromIPC, RecordBatchFileWriter } = require('apache-arrow');
 
 const app = express();
 const server = http.createServer(app);
@@ -135,14 +138,19 @@ async function generateAndCacheDataset() {
         
         // Check if today's export already exists
         const csvFile = bucket.file(`datasets/game_dataset_${today}.csv`);
-        const jsonFile = bucket.file(`datasets/game_dataset_${today}.json`);
+        const parquetFile = bucket.file(`datasets/game_dataset_${today}.parquet`);
+        const featherFile = bucket.file(`datasets/game_dataset_${today}.feather`);
         
         const [csvExists] = await csvFile.exists();
-        const [jsonExists] = await jsonFile.exists();
+        const [parquetExists] = await parquetFile.exists();
+        const [featherExists] = await featherFile.exists();
         
-        if (csvExists && jsonExists) {
+        // Force regeneration for debugging - remove this line later
+        const forceRegenerate = true;
+        
+        if (csvExists && parquetExists && featherExists && !forceRegenerate) {
             console.log(`Using cached dataset for ${today}`);
-            return { csvFile, jsonFile };
+            return { csvFile, parquetFile, featherFile };
         }
         
         console.log(`Generating new dataset export for ${today}...`);
@@ -154,9 +162,9 @@ async function generateAndCacheDataset() {
                 userUid,
                 level,
                 maxSpeed,
-                TIMESTAMP_MILLIS(UNIX_MILLIS(sessionStartTime)) as sessionStartTime,
-                TIMESTAMP_MILLIS(UNIX_MILLIS(sessionEndTime)) as sessionEndTime,
-                TIMESTAMP_MILLIS(UNIX_MILLIS(timestamp)) as timestamp,
+                UNIX_MILLIS(sessionStartTime) as sessionStartTime,
+                UNIX_MILLIS(sessionEndTime) as sessionEndTime,
+                UNIX_MILLIS(timestamp) as timestamp,
                 dotX,
                 dotY,
                 mouseX,
@@ -167,15 +175,21 @@ async function generateAndCacheDataset() {
         
         const [rows] = await bigquery.query({ query });
         
-        // Generate CSV
-        const csvHeader = 'sessionUid,userUid,level,maxSpeed,sessionStartTime,sessionEndTime,timestamp,dotX,dotY,mouseX,mouseY\n';
-        const csvRows = rows.map(row => 
-            `${row.sessionUid},${row.userUid},${row.level},${row.maxSpeed},${row.sessionStartTime},${row.sessionEndTime},${row.timestamp},${row.dotX},${row.dotY},${row.mouseX},${row.mouseY}`
+        // Apply anonymization for privacy protection
+        const anonymizedRows = anonymizeData(rows);
+        
+        // Generate CSV (without sessionStartTime, sessionEndTime, and level)
+        const csvHeader = 'sessionUid,userUid,maxSpeed,timestamp,dotX,dotY,mouseX,mouseY\n';
+        const csvRows = anonymizedRows.map(row => 
+            `${row.sessionUid},${row.userUid},${row.maxSpeed},${row.timestamp},${row.dotX},${row.dotY},${row.mouseX},${row.mouseY}`
         ).join('\n');
         const csv = csvHeader + csvRows;
         
-        // Generate JSON
-        const json = JSON.stringify(rows, null, 2);
+        // Generate Parquet (with all fields)
+        const parquetBuffer = await generateParquetBuffer(anonymizedRows);
+        
+        // Generate Feather (with all fields)
+        const featherBuffer = await generateFeatherBuffer(anonymizedRows);
         
         // Save to Cloud Storage
         await csvFile.save(csv, {
@@ -185,9 +199,16 @@ async function generateAndCacheDataset() {
             }
         });
         
-        await jsonFile.save(json, {
+        await parquetFile.save(parquetBuffer, {
             metadata: {
-                contentType: 'application/json',
+                contentType: 'application/octet-stream',
+                cacheControl: 'public, max-age=86400', // Cache for 24 hours
+            }
+        });
+        
+        await featherFile.save(featherBuffer, {
+            metadata: {
+                contentType: 'application/octet-stream',
                 cacheControl: 'public, max-age=86400', // Cache for 24 hours
             }
         });
@@ -197,7 +218,7 @@ async function generateAndCacheDataset() {
         // Clean up old exports (keep only last 7 days)
         await cleanupOldExports(bucket);
         
-        return { csvFile, jsonFile };
+        return { csvFile, parquetFile, featherFile };
         
     } catch (error) {
         console.error('Error generating dataset:', error);
@@ -214,7 +235,7 @@ async function cleanupOldExports(bucket) {
         
         for (const file of files) {
             // Extract date from filename (game_dataset_YYYY-MM-DD.extension)
-            const match = file.name.match(/game_dataset_(\d{4}-\d{2}-\d{2})/);
+            const match = file.name.match(/game_dataset_(\d{4}-\d{2}-\d{2})\.(csv|parquet|feather)$/);
             if (match) {
                 const fileDate = new Date(match[1]);
                 if (fileDate < cutoffDate) {
@@ -227,6 +248,132 @@ async function cleanupOldExports(bucket) {
         console.error('Error cleaning up old exports:', error);
         // Don't throw - cleanup failure shouldn't break the export
     }
+}
+
+// Generate Parquet buffer from rows data
+async function generateParquetBuffer(rows) {
+    try {
+        // Define Parquet schema
+        const schema = new ParquetSchema({
+            sessionUid: { type: 'INT32' },
+            userUid: { type: 'INT32' },
+            level: { type: 'INT32' },
+            maxSpeed: { type: 'DOUBLE' },
+            sessionStartTime: { type: 'INT64', optional: true },
+            sessionEndTime: { type: 'INT64', optional: true },
+            timestamp: { type: 'INT64', optional: true },
+            dotX: { type: 'DOUBLE' },
+            dotY: { type: 'DOUBLE' },
+            mouseX: { type: 'DOUBLE' },
+            mouseY: { type: 'DOUBLE' }
+        });
+
+        // Create a temporary file path for parquet generation
+        const tempPath = path.join(__dirname, 'temp_dataset.parquet');
+        const writer = await ParquetWriter.openFile(schema, tempPath);
+
+        // Write rows to parquet file
+        for (const row of rows) {
+            await writer.appendRow({
+                sessionUid: row.sessionUid,
+                userUid: row.userUid,
+                level: row.level,
+                maxSpeed: row.maxSpeed,
+                sessionStartTime: row.sessionStartTime || null,
+                sessionEndTime: row.sessionEndTime || null,
+                timestamp: row.timestamp || null,
+                dotX: row.dotX,
+                dotY: row.dotY,
+                mouseX: row.mouseX,
+                mouseY: row.mouseY
+            });
+        }
+
+        await writer.close();
+
+        // Read the file back as buffer
+        const buffer = fs.readFileSync(tempPath);
+        
+        // Clean up temp file
+        fs.unlinkSync(tempPath);
+        
+        return buffer;
+    } catch (error) {
+        console.error('Error generating Parquet buffer:', error);
+        throw error;
+    }
+}
+
+// Generate Feather (Arrow IPC) buffer from rows data
+async function generateFeatherBuffer(rows) {
+    try {
+        if (rows.length === 0) {
+            return Buffer.alloc(0);
+        }
+
+        // Create a temporary file path for arrow generation
+        const tempPath = path.join(__dirname, 'temp_dataset.arrow');
+
+        // Prepare data for tableFromJSON - ensure all fields are present and properly typed
+        const data = rows.map(row => ({
+            sessionUid: parseInt(row.sessionUid) || 0,
+            userUid: parseInt(row.userUid) || 0,
+            level: parseInt(row.level) || 0,
+            maxSpeed: parseFloat(row.maxSpeed) || 0.0,
+            sessionStartTime: row.sessionStartTime || null,
+            sessionEndTime: row.sessionEndTime || null,
+            timestamp: row.timestamp || null,
+            dotX: parseFloat(row.dotX) || 0.0,
+            dotY: parseFloat(row.dotY) || 0.0,
+            mouseX: parseFloat(row.mouseX) || 0.0,
+            mouseY: parseFloat(row.mouseY) || 0.0
+        }));
+
+        console.log(`Creating Feather file with ${data.length} rows`);
+        
+        // Create Arrow table from JSON data
+        const table = tableFromJSON(data);
+        
+        console.log(`Table created with ${table.numRows} rows and ${table.numCols} columns`);
+        
+        // Convert table to IPC buffer format
+        const ipcBuffer = tableToIPC(table, 'file');
+        
+        console.log(`IPC buffer created with size: ${ipcBuffer.length} bytes`);
+        
+        return ipcBuffer;
+    } catch (error) {
+        console.error('Error generating Feather buffer:', error);
+        console.error('Error details:', error.message);
+        console.error('Stack trace:', error.stack);
+        throw error;
+    }
+}
+
+// Anonymize UIDs for privacy protection
+function anonymizeData(rows) {
+    const sessionUidMap = new Map();
+    const userUidMap = new Map();
+    let sessionCounter = 0;
+    let userCounter = 0;
+    
+    return rows.map(row => {
+        // Anonymize sessionUid
+        if (!sessionUidMap.has(row.sessionUid)) {
+            sessionUidMap.set(row.sessionUid, sessionCounter++);
+        }
+        
+        // Anonymize userUid
+        if (!userUidMap.has(row.userUid)) {
+            userUidMap.set(row.userUid, userCounter++);
+        }
+        
+        return {
+            ...row,
+            sessionUid: sessionUidMap.get(row.sessionUid),
+            userUid: userUidMap.get(row.userUid)
+        };
+    });
 }
 
 // HTTP Routes
@@ -268,16 +415,32 @@ app.get('/api/download-dataset', async (req, res) => {
     try {
         const format = req.query.format || 'csv';
         
-        if (!['csv', 'json'].includes(format)) {
-            return res.status(400).json({ error: 'Unsupported format. Use csv or json.' });
+        if (!['csv', 'parquet', 'feather'].includes(format)) {
+            return res.status(400).json({ error: 'Unsupported format. Use csv, parquet, or feather.' });
         }
         
         // Generate/get cached dataset from Cloud Storage
-        const { csvFile, jsonFile } = await generateAndCacheDataset();
+        const { csvFile, parquetFile, featherFile } = await generateAndCacheDataset();
         
-        const file = format === 'csv' ? csvFile : jsonFile;
-        const contentType = format === 'csv' ? 'text/csv' : 'application/json';
-        const filename = `game_dataset.${format}`;
+        let file, contentType, filename;
+        
+        switch (format) {
+            case 'csv':
+                file = csvFile;
+                contentType = 'text/csv';
+                filename = 'game_dataset.csv';
+                break;
+            case 'parquet':
+                file = parquetFile;
+                contentType = 'application/octet-stream';
+                filename = 'game_dataset.parquet';
+                break;
+            case 'feather':
+                file = featherFile;
+                contentType = 'application/octet-stream';
+                filename = 'game_dataset.feather';
+                break;
+        }
         
         // Stream the file directly from Cloud Storage to the client
         res.setHeader('Content-Type', contentType);

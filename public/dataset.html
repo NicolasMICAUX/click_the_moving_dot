@@ -58,12 +58,20 @@
             background-color: #0056b3;
         }
         
-        .download-btn.json {
-            background-color: #28a745;
+        .download-btn.parquet {
+            background-color: #fd7e14;
         }
         
-        .download-btn.json:hover {
-            background-color: #1e7e34;
+        .download-btn.parquet:hover {
+            background-color: #e8650e;
+        }
+        
+        .download-btn.feather {
+            background-color: #6f42c1;
+        }
+        
+        .download-btn.feather:hover {
+            background-color: #563d7c;
         }
         
         .data-schema {
@@ -124,12 +132,15 @@
             <h3>About the Dataset</h3>
             <p>This dataset contains mouse movement tracking data and game session information from the "Click the Moving Dot" game. Each record represents a single mouse position tracking event during gameplay.</p>
             
+            <p><strong>Privacy Protection:</strong> All user and session identifiers have been anonymized with sequential integers (0, 1, 2, ...) to protect player privacy while maintaining data relationships.</p>
+            
             <p><strong>Use Cases:</strong></p>
             <ul>
                 <li>Training AI models to predict dot movement patterns</li>
                 <li>Analyzing user behavior and reaction times</li>
                 <li>Studying human-computer interaction patterns</li>
                 <li>Research on mouse tracking and motor skills</li>
+                <li>High-performance data analysis with columnar formats (Parquet/Feather)</li>
             </ul>
         </div>
         
@@ -142,8 +153,11 @@
             <a href="/api/download-dataset?format=csv" class="download-btn" target="_blank">
                 Download CSV
             </a>
-            <a href="/api/download-dataset?format=json" class="download-btn json" target="_blank">
-                Download JSON
+            <a href="/api/download-dataset?format=parquet" class="download-btn parquet" target="_blank">
+                Download Parquet
+            </a>
+            <a href="/api/download-dataset?format=feather" class="download-btn feather" target="_blank">
+                Download Feather
             </a>
         </div>
         
@@ -160,18 +174,18 @@
                 <tbody>
                     <tr>
                         <td>sessionUid</td>
-                        <td>String</td>
-                        <td>Unique identifier for the game session</td>
+                        <td>Integer</td>
+                        <td>Anonymous identifier for the game session (0, 1, 2, ...)</td>
                     </tr>
                     <tr>
                         <td>userUid</td>
-                        <td>String</td>
-                        <td>Unique identifier for the user (persistent across sessions)</td>
+                        <td>Integer</td>
+                        <td>Anonymous identifier for the user (0, 1, 2, ...)</td>
                     </tr>
                     <tr>
                         <td>level</td>
                         <td>Integer</td>
-                        <td>Game level when this tracking point was recorded</td>
+                        <td>Game level when this tracking point was recorded (Parquet/Feather only)</td>
                     </tr>
                     <tr>
                         <td>maxSpeed</td>
@@ -181,12 +195,12 @@
                     <tr>
                         <td>sessionStartTime</td>
                         <td>Timestamp</td>
-                        <td>Unix timestamp when the session started</td>
+                        <td>Unix timestamp when the session started (Parquet/Feather only)</td>
                     </tr>
                     <tr>
                         <td>sessionEndTime</td>
                         <td>Timestamp</td>
-                        <td>Unix timestamp when the session ended</td>
+                        <td>Unix timestamp when the session ended (Parquet/Feather only)</td>
                     </tr>
                     <tr>
                         <td>timestamp</td>
@@ -225,6 +239,13 @@
                 <li><strong>Sampling Rate:</strong> Mouse movements are tracked in real-time as they occur</li>
                 <li><strong>Dot Radius:</strong> 15 pixels (useful for collision detection analysis)</li>
                 <li><strong>Speed Progression:</strong> Each level increases max speed by 0.2 units</li>
+                <li><strong>File Formats:</strong> 
+                    <ul>
+                        <li>CSV - Universal compatibility, human-readable. Contains core tracking data only (no session metadata)</li>
+                        <li>Parquet - Columnar format, excellent compression and query performance. Contains all fields</li>
+                        <li>Feather - Arrow IPC format, fast read/write for Python/R. Use <code>pd.read_feather()</code> or <code>pd.read_ipc()</code>. Contains all fields</li>
+                    </ul>
+                </li>
             </ul>
         </div>
     </div>
