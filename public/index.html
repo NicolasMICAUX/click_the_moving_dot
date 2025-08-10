@@ -75,6 +75,7 @@
     
     <div class="instructions">
         <p><strong>Instructions:</strong> Click the red dot to advance to the next level. The dot will try to escape from your mouse cursor and gets faster with each level!</p>
+        <p><small><a href="/submit" target="_blank">Submit your own AI model</a> | <a href="/dataset" target="_blank">Download dataset</a></small></p>
     </div>
 
     <script>
@@ -134,11 +135,21 @@
                 console.log('Attempting to load AI model...');
                 document.getElementById('aiStatus').textContent = 'Loading...';
                 
+                // Check for shared model parameter
+                const urlParams = new URLSearchParams(window.location.search);
+                const sharedModelUid = urlParams.get('r');
+                
+                let modelUrl = '/api/onnx-model';
+                if (sharedModelUid) {
+                    modelUrl += `?r=${sharedModelUid}`;
+                    console.log(`Loading shared model: ${sharedModelUid}`);
+                }
+                
                 try {
-                    const modelLoaded = await this.dotAI.loadModel('/api/onnx-model');
+                    const modelLoaded = await this.dotAI.loadModel(modelUrl);
                     if (modelLoaded) {
                         console.log('✅ AI model loaded successfully - using AI for dot behavior');
-                        document.getElementById('aiStatus').textContent = 'Enabled';
+                        document.getElementById('aiStatus').textContent = sharedModelUid ? `Shared Model (${sharedModelUid})` : 'Enabled';
                         document.getElementById('aiStatus').style.color = '#28a745';
                     } else {
                         console.log('❌ AI model not available - using default behavior');

@@ -17,13 +17,14 @@ const customOnnxFile = onnxFileArg ? onnxFileArg.split('=')[1] : null;
 const DISABLE_CLOUD = process.env.DISABLE_CLOUD === 'true' || process.env.NODE_ENV === 'development';
 
 // Only import cloud services if not disabled
-let BigQuery, Storage, ParquetWriter, ParquetSchema, Table, Schema, Field, Float64, Int32, Int64, Utf8, TimestampMillisecond, tableToIPC, RecordBatch, tableFromJSON, vectorFromArray, tableFromIPC, RecordBatchFileWriter;
-let bigquery, storage;
+let BigQuery, Storage, ParquetWriter, ParquetSchema, Table, Schema, Field, Float64, Int32, Int64, Utf8, TimestampMillisecond, tableToIPC, RecordBatch, tableFromJSON, vectorFromArray, tableFromIPC, RecordBatchFileWriter, Firestore;
+let bigquery, storage, firestore;
 
 if (!DISABLE_CLOUD) {
     try {
         ({ BigQuery } = require('@google-cloud/bigquery'));
         ({ Storage } = require('@google-cloud/storage'));
+        ({ Firestore } = require('@google-cloud/firestore'));
         ({ ParquetWriter, ParquetSchema } = require('parquetjs-lite'));
         ({ Table, Schema, Field, Float64, Int32, Int64, Utf8, TimestampMillisecond, tableToIPC, RecordBatch, tableFromJSON, vectorFromArray, tableFromIPC, RecordBatchFileWriter } = require('apache-arrow'));
         
@@ -60,12 +61,72 @@ if (!DISABLE_CLOUD) {
         projectId: projectId,
         keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
     });
+
+    // Initialize Firestore with explicit configuration
+    firestore = new Firestore({
+        projectId: projectId,
+        keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
+    });
 } else {
     console.log('🔧 Running in local mode - cloud services disabled');
 }
 
 // Cloud Storage bucket for dataset exports
 const EXPORT_BUCKET_NAME = 'clickthemovingdot-exports';
+
+// Firestore collection for ONNX models
+const MODELS_COLLECTION = 'onnx_models';
+
+// Generate short UID for model sharing
+function generateShortUID() {
+    // Use base36 encoding for short UIDs (0-9, a-z)
+    // This gives us 36^6 = ~2 billion possible combinations for 6 characters
+    const chars = '0123456789abcdefghijklmnopqrstuvwxyz';
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+        result += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return result;
+}
+
+// Validate ONNX model URL
+function validateModelUrl(url) {
+    try {
+        const parsed = new URL(url);
+        
+        // Must be HTTPS
+        if (parsed.protocol !== 'https:') {
+            return { valid: false, error: 'URL must use HTTPS protocol' };
+        }
+        
+        // Must end with .onnx
+        if (!parsed.pathname.toLowerCase().endsWith('.onnx')) {
+            return { valid: false, error: 'URL must point to an .onnx file' };
+        }
+        
+        // Check for common safe domains (you can expand this list)
+        // const safeDomains = [
+        //     'raw.githubusercontent.com',
+        //     'github.com',
+        //     'huggingface.co',
+        //     'cdn.jsdelivr.net',
+        //     'unpkg.com'
+        // ];
+        
+        // const isKnownSafe = safeDomains.some(domain => 
+        //     parsed.hostname === domain || parsed.hostname.endsWith('.' + domain)
+        // );
+        
+        // if (!isKnownSafe) {
+        //     console.log(`⚠️ Unknown domain for model URL: ${parsed.hostname}`);
+        //     // Allow but log for monitoring
+        // }
+        
+        return { valid: true };
+    } catch (error) {
+        return { valid: false, error: 'Invalid URL format' };
+    }
+}
 
 // In-memory cache for dataset
 
@@ -143,26 +204,60 @@ async function streamToBigQuery(sessionData) {
         const table = bigquery.dataset(DATASET_ID).table(TABLE_ID);
         
         // Transform data for BigQuery
-        const rows = sessionData.mouseTrackingData.map(trackingPoint => ({
-            sessionUid: sessionData.sessionUid,
-            userUid: sessionData.userUid,
-            level: sessionData.level,
-            maxSpeed: sessionData.maxSpeed,
-            sessionStartTime: new Date(sessionData.sessionStartTime),
-            sessionEndTime: sessionData.sessionEndTime ? new Date(sessionData.sessionEndTime) : null,
-            timestamp: new Date(trackingPoint.timestamp),
-            dotX: trackingPoint.dotX,
-            dotY: trackingPoint.dotY,
-            mouseX: trackingPoint.mouseX,
-            mouseY: trackingPoint.mouseY,
-            mouseDown: trackingPoint.mouseDown || false,
-        }));
+        const rows = sessionData.mouseTrackingData.map((trackingPoint, index) => {
+            // Validate required numeric fields
+            const validateNumber = (value, fieldName) => {
+                if (typeof value !== 'number' || isNaN(value) || !isFinite(value)) {
+                    console.warn(`Invalid ${fieldName} at tracking point ${index}: ${value}`);
+                    return 0; // Default to 0 for invalid numeric values
+                }
+                return value;
+            };
+            
+            // Validate timestamps
+            const validateTimestamp = (value, fieldName) => {
+                if (!value) return null;
+                const date = new Date(value);
+                if (isNaN(date.getTime())) {
+                    console.warn(`Invalid ${fieldName} at tracking point ${index}: ${value}`);
+                    return new Date(); // Default to current time
+                }
+                return date;
+            };
+            
+            return {
+                sessionUid: String(sessionData.sessionUid || ''),
+                userUid: String(sessionData.userUid || ''),
+                level: validateNumber(sessionData.level, 'level'),
+                maxSpeed: validateNumber(sessionData.maxSpeed, 'maxSpeed'),
+                sessionStartTime: validateTimestamp(sessionData.sessionStartTime, 'sessionStartTime'),
+                sessionEndTime: sessionData.sessionEndTime ? validateTimestamp(sessionData.sessionEndTime, 'sessionEndTime') : null,
+                timestamp: validateTimestamp(trackingPoint.timestamp, 'timestamp'),
+                dotX: validateNumber(trackingPoint.dotX, 'dotX'),
+                dotY: validateNumber(trackingPoint.dotY, 'dotY'),
+                mouseX: validateNumber(trackingPoint.mouseX, 'mouseX'),
+                mouseY: validateNumber(trackingPoint.mouseY, 'mouseY'),
+                mouseDown: Boolean(trackingPoint.mouseDown),
+            };
+        });
         
         await table.insert(rows);
         console.log(`Streamed ${rows.length} tracking points to BigQuery`);
         
     } catch (error) {
         console.error('Error streaming to BigQuery:', error);
+        
+        // Log detailed error information for PartialFailureError
+        if (error.name === 'PartialFailureError' && error.errors) {
+            console.error('Detailed BigQuery insertion errors:');
+            error.errors.forEach((errorDetail, index) => {
+                console.error(`Row ${index}:`, {
+                    errors: errorDetail.errors,
+                    rowData: errorDetail.row
+                });
+            });
+        }
+        
         throw error; // We want to fail the session save if BigQuery fails since it's our only storage
     }
 }
@@ -429,34 +524,91 @@ app.get('/dataset', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dataset.html'));
 });
 
+app.get('/submit', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'submit_model.html'));
+});
+
 // Serve custom ONNX model if specified
-app.get('/api/onnx-model', (req, res) => {
+app.get('/api/onnx-model', async (req, res) => {
     let onnxPath;
+    const sharedModelUid = req.query.r; // Check for shared model UID
     
-    if (customOnnxFile) {
-        // Custom ONNX file specified via command line
-        if (path.isAbsolute(customOnnxFile)) {
-            onnxPath = customOnnxFile;
-        } else {
-            onnxPath = path.join(__dirname, customOnnxFile);
+    try {
+        if (sharedModelUid) {
+            // Try to load shared model from Firestore
+            if (DISABLE_CLOUD) {
+                return res.status(503).json({ 
+                    error: 'Shared models require cloud services', 
+                    message: 'Shared model feature is only available when running with Firestore access'
+                });
+            }
+            
+            const modelDoc = await firestore.collection(MODELS_COLLECTION).doc(sharedModelUid).get();
+            
+            if (!modelDoc.exists) {
+                return res.status(404).json({ 
+                    error: 'Shared model not found',
+                    uid: sharedModelUid
+                });
+            }
+            
+            const modelData = modelDoc.data();
+            const modelUrl = modelData.modelUrl;
+            
+            console.log(`Proxying shared ONNX model ${sharedModelUid}: ${modelUrl}`);
+            
+            // Fetch the model from the URL and proxy it
+            const fetch = require('node-fetch');
+            const modelResponse = await fetch(modelUrl);
+            
+            if (!modelResponse.ok) {
+                return res.status(502).json({ 
+                    error: 'Failed to fetch shared model',
+                    uid: sharedModelUid,
+                    status: modelResponse.status
+                });
+            }
+            
+            // Set appropriate headers and pipe the response
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+            modelResponse.body.pipe(res);
+            return;
         }
-    } else {
-        // Default ONNX file
-        onnxPath = path.join(__dirname, 'public', 'dummy_dot_behavior.onnx');
-    }
-    
-    // Check if file exists
-    if (!fs.existsSync(onnxPath)) {
-        return res.status(404).json({ 
-            error: 'ONNX model not found',
-            path: onnxPath,
-            customFile: !!customOnnxFile
+        
+        // Original logic for custom/default models
+        if (customOnnxFile) {
+            // Custom ONNX file specified via command line
+            if (path.isAbsolute(customOnnxFile)) {
+                onnxPath = customOnnxFile;
+            } else {
+                onnxPath = path.join(__dirname, customOnnxFile);
+            }
+        } else {
+            // Default ONNX file
+            onnxPath = path.join(__dirname, 'public', 'dummy_dot_behavior.onnx');
+        }
+        
+        // Check if file exists
+        if (!fs.existsSync(onnxPath)) {
+            return res.status(404).json({ 
+                error: 'ONNX model not found',
+                path: onnxPath,
+                customFile: !!customOnnxFile
+            });
+        }
+        
+        console.log(`Serving ONNX model: ${onnxPath}`);
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.sendFile(onnxPath);
+        
+    } catch (error) {
+        console.error('Error serving ONNX model:', error);
+        res.status(500).json({ 
+            error: 'Internal server error while fetching model',
+            message: error.message
         });
     }
-    
-    console.log(`Serving ONNX model: ${onnxPath}`);
-    res.setHeader('Content-Type', 'application/octet-stream');
-    res.sendFile(onnxPath);
 });
 
 // Get ONNX model info
@@ -486,6 +638,103 @@ app.get('/api/onnx-info', (req, res) => {
         size: stats ? stats.size : null,
         modified: stats ? stats.mtime : null
     });
+});
+
+// Submit ONNX model endpoint
+app.post('/api/submit-model', async (req, res) => {
+    if (DISABLE_CLOUD) {
+        return res.status(503).json({ 
+            error: 'Model submission requires cloud services', 
+            message: 'This feature is only available when running with Firestore access'
+        });
+    }
+
+    try {
+        const { modelUrl, description } = req.body;
+        
+        // Validate required fields
+        if (!modelUrl) {
+            return res.status(400).json({ error: 'Model URL is required' });
+        }
+        
+        // Validate URL format and safety
+        const validation = validateModelUrl(modelUrl);
+        if (!validation.valid) {
+            return res.status(400).json({ error: validation.error });
+        }
+        
+        // Test if the URL is accessible and returns a valid ONNX file
+        try {
+            const fetch = require('node-fetch');
+            const testResponse = await fetch(modelUrl, { method: 'HEAD', timeout: 10000 });
+            
+            if (!testResponse.ok) {
+                return res.status(400).json({ 
+                    error: 'Model URL is not accessible',
+                    status: testResponse.status 
+                });
+            }
+            
+            // Check content type if available
+            const contentType = testResponse.headers.get('content-type');
+            if (contentType && !contentType.includes('application/octet-stream') && !contentType.includes('application/x-onnx')) {
+                console.log(`⚠️ Unexpected content type for ONNX model: ${contentType}`);
+                // Allow but log for monitoring
+            }
+            
+        } catch (fetchError) {
+            return res.status(400).json({ 
+                error: 'Failed to verify model URL accessibility',
+                details: fetchError.message 
+            });
+        }
+        
+        // Generate unique UID
+        let uid;
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        do {
+            uid = generateShortUID();
+            attempts++;
+            
+            // Check if UID already exists
+            const existingDoc = await firestore.collection(MODELS_COLLECTION).doc(uid).get();
+            if (!existingDoc.exists) {
+                break; // Found unique UID
+            }
+            
+            if (attempts >= maxAttempts) {
+                return res.status(500).json({ error: 'Failed to generate unique UID, please try again' });
+            }
+        } while (true);
+        
+        // Store in Firestore
+        const modelData = {
+            uid: uid,
+            modelUrl: modelUrl,
+            description: description || '',
+            submittedAt: new Date(),
+            submitterIP: req.ip || req.connection.remoteAddress, // For abuse monitoring
+            accessCount: 0,
+            lastAccessed: null
+        };
+        
+        await firestore.collection(MODELS_COLLECTION).doc(uid).set(modelData);
+        
+        console.log(`📤 New model submitted with UID ${uid}: ${modelUrl}`);
+        
+        res.status(200).json({ 
+            success: true, 
+            uid: uid,
+            shareUrl: `${req.protocol}://${req.get('host')}/?r=${uid}`,
+            message: 'Model submitted successfully' 
+        });
+        
+    } catch (error) {
+        console.error('Error submitting model:', error);
+        res.status(500).json({ error: 'Failed to submit model' });
+    }
 });
 
 // Save game session data (called when game ends)
@@ -614,6 +863,7 @@ server.listen(PORT, async () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🎮 Game available at: http://localhost:${PORT}`);
     console.log(`📊 Dataset page at: http://localhost:${PORT}/dataset`);
+    console.log(`📤 Submit your own AI model at: http://localhost:${PORT}/submit`);
     
     // Show configuration
     if (DISABLE_CLOUD) {

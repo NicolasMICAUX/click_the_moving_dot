@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Submit ONNX Model - Click the Moving Dot</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        
+        input[type="url"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        
+        input[type="url"]:focus, textarea:focus {
+            border-color: #007bff;
+            outline: none;
+        }
+        
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        
+        .submit-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            transition: background-color 0.3s;
+        }
+        
+        .submit-btn:hover {
+            background-color: #0056b3;
+        }
+        
+        .submit-btn:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        .result.success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .result.error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .share-link {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        
+        .copy-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        
+        .copy-btn:hover {
+            background-color: #218838;
+        }
+        
+        .info {
+            background-color: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .nav-links {
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .nav-links a {
+            color: #007bff;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Submit ONNX Model</h1>
+        
+        <div class="info">
+            <strong>Submit your AI model to control the dot behavior!</strong><br>
+            Provide a direct URL to your ONNX model file (e.g., from GitHub raw files). 
+            You'll get a short shareable link that others can use to play with your model.
+        </div>
+        
+        <form id="submitForm">
+            <div class="form-group">
+                <label for="modelUrl">ONNX Model URL *</label>
+                <input 
+                    type="url" 
+                    id="modelUrl" 
+                    name="modelUrl" 
+                    required 
+                    placeholder="https://raw.githubusercontent.com/username/repo/main/model.onnx"
+                    pattern="https://.*\.onnx$"
+                    title="Please provide a valid HTTPS URL ending with .onnx"
+                >
+            </div>
+            
+            <div class="form-group">
+                <label for="description">Description (optional)</label>
+                <textarea 
+                    id="description" 
+                    name="description" 
+                    placeholder="Describe your model behavior, training approach, or any special features..."
+                ></textarea>
+            </div>
+            
+            <button type="submit" class="submit-btn" id="submitBtn">
+                Submit Model
+            </button>
+        </form>
+        
+        <div id="result" class="result">
+            <div id="resultMessage"></div>
+        </div>
+        
+        <div class="nav-links">
+            <a href="/">← Back to Game</a>
+            <a href="/dataset">Dataset</a>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('submitForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const result = document.getElementById('result');
+            const resultMessage = document.getElementById('resultMessage');
+            
+            // Disable submit button
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+            
+            // Hide previous results
+            result.style.display = 'none';
+            
+            const formData = {
+                modelUrl: document.getElementById('modelUrl').value,
+                description: document.getElementById('description').value
+            };
+            
+            try {
+                const response = await fetch('/api/submit-model', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.className = 'result success';
+                    result.style.display = 'block';
+                    
+                    const shareUrl = `${window.location.origin}/?r=${data.uid}`;
+                    
+                    resultMessage.innerHTML = `
+                        <strong>Success!</strong> Your model has been submitted.<br>
+                        <strong>Share URL:</strong>
+                        <div class="share-link">
+                            ${shareUrl}
+                            <button class="copy-btn" onclick="copyToClipboard('${shareUrl}')">Copy</button>
+                        </div>
+                        <small>UID: ${data.uid}</small>
+                    `;
+                    
+                    // Reset form
+                    document.getElementById('submitForm').reset();
+                } else {
+                    throw new Error(data.error || 'Failed to submit model');
+                }
+                
+            } catch (error) {
+                result.className = 'result error';
+                result.style.display = 'block';
+                resultMessage.innerHTML = `<strong>Error:</strong> ${error.message}`;
+            } finally {
+                // Re-enable submit button
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Model';
+            }
+        });
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Show feedback
+                const copyBtn = event.target;
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = 'Copied!';
+                copyBtn.style.backgroundColor = '#155724';
+                
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                    copyBtn.style.backgroundColor = '#28a745';
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                alert('Failed to copy to clipboard. Please copy manually.');
+            });
+        }
+    </script>
+</body>
+</html>
