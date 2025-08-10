@@ -1,0 +1,10 @@
+title: "Click Moving Dot Firestore Minimal Access"
+description: "Minimal Firestore permissions for ONNX model storage only"
+stage: "GA"
+includedPermissions:
+  # Essential Firestore permissions
+  - "datastore.entities.get"      # Read documents
+  - "datastore.entities.create"   # Create documents  
+  - "datastore.entities.update"   # Update documents
+  - "datastore.databases.get"     # Required for client initialization
+  - "resourcemanager.projects.get" # Required for project access
