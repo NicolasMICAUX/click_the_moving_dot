@@ -353,11 +353,20 @@ result = session.run(None, {
 print("Output shapes:", [r.shape for r in result])
 ```
 
-## 🎯 Deployment
+## 🎯 Test you ONNX model in-game
+1. **Start the server with custom ONNX**: Run `npm start -- --onnx=path/to/your/model.onnx`
+2. **Test in browser**: Visit `http://localhost:3000` and watch your AI in action!
 
-1. **Replace the model**: Copy your `model.onnx` to `public/dummy_dot_behavior.onnx`
-2. **Start the server**: Run `npm start` 
-3. **Test in browser**: Visit `http://localhost:3000` and watch your AI in action!
-4. **Debug**: Check browser console for AI status and error messages
+### Share your model with other players
+1. **Upload your model**: Push your `model.onnx` to GitHub/Hugging Face/etc.
+2. **Get raw URL**: Copy the direct download link (must end with `.onnx`)
+3. **Submit model**: Visit `https://clickthemovingdot.uc.r.appspot.com/submit` and submit your model URL
+4. **Get share link**: Receive a short URL like `https://clickthemovingdot.uc.r.appspot.com/?r=abc123`
+5. **Share with others**: Anyone can test your AI model using the share link!
+
+### Debug Tips
+- Check browser console for AI status and error messages
+- Verify your model accepts `[seq_len, 6]` input shape
+- Test with ONNX Runtime before deployment
 
 Happy training! 🚀 Create the most challenging dot behavior possible!

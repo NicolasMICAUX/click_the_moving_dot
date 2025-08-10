@@ -3,7 +3,7 @@
 A real-time HTML5 game where players try to click a moving dot that attempts to escape from their mouse cursor.  
 The dataset of all user games is publicly available: **you can train your own AI model to escape user mouse** 🤖
 
-🎮 **[Play the Game](https://clickthemovingdot.uc.r.appspot.com/)** | 📊 **[Download Dataset](https://clickthemovingdot.uc.r.appspot.com/dataset/)**
+🎮 **[Play the Game](https://clickthemovingdot.uc.r.appspot.com/)** | 📊 **[Download Dataset](https://clickthemovingdot.uc.r.appspot.com/dataset/)** | 🤖 **[Submit AI Model](https://clickthemovingdot.uc.r.appspot.com/submit)**
 
 ## 🚀 Quick Start
 
@@ -26,7 +26,7 @@ npm run start:local-onnx -- --onnx=path/to/your/model.onnx
 
 The game will run at `http://localhost:3000` - **no Google Cloud setup required!** 🎉
 
-See [**ML MODEL GUIDE**](ML_MODEL_GUIDE.md) 🧠 on how to train and export your own models.
+See [**ML MODEL GUIDE**](ML_MODEL_GUIDE.md) 🧠 on how to train, export and share your own models.
 
 
 ### ☁️ For Admins With Google Cloud Access (Full Mode)

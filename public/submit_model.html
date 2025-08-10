@@ -155,9 +155,16 @@
         <h1>Submit ONNX Model</h1>
         
         <div class="info">
-            <strong>Submit your AI model to control the dot behavior!</strong><br>
-            Provide a direct URL to your ONNX model file (e.g., from GitHub raw files). 
-            You'll get a short shareable link that others can use to play with your model.
+            <strong>🤖 Submit your AI model to control the dot behavior!</strong><br>
+            <strong>How it works:</strong>
+            <ol style="text-align: left; margin: 10px 0;">
+                <li>📁 <strong>Upload your ONNX model</strong> to GitHub/Hugging Face/etc.</li>
+                <li>🔗 <strong>Get the raw file URL</strong> (must end with .onnx)</li>
+                <li>📝 <strong>Submit the URL below</strong> with optional description</li>
+                <li>🎯 <strong>Get a shareable link</strong> like <code>yoursite.com/?r=abc123</code></li>
+                <li>🚀 <strong>Share with others</strong> to test your AI model!</li>
+            </ol>
+            <small>⚠️ Make sure your model expects input shape <code>[seq_len, 6]</code> with features: timestamp, dotX, dotY, mouseX, mouseY, mouseDown</small>
         </div>
         
         <form id="submitForm">
