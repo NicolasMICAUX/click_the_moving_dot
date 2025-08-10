@@ -45,8 +45,15 @@ npm run start:onnx -- --onnx=path/to/your/model.onnx
 
 #### ☁️ App Engine Deployment (Cloud Mode)
 ```bash
-# Deploy to Google App Engine
-gcloud app deploy
+# Deploy minified production build (recommended)
+npm run deploy
+
+# Manual build and deploy
+npm run build
+cd dist && gcloud app deploy --quiet
+
+# Deploy to staging for testing
+./deploy.sh --staging
 ```
 
 #### 💻 Local Development
@@ -109,6 +116,9 @@ GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account-key.json
 - `npm run start:local-onnx` - Production with custom ONNX model (local mode)
 - `npm run dev` - Development server (cloud mode)
 - `npm run dev:local` - Development server (local mode)
+- `npm run build` - Build minified production assets
+- `npm run deploy` - Build and deploy to production (minified)
+- `./deploy.sh` - Advanced deployment with staging options
 
 ## 📁 Project Structure
 ```

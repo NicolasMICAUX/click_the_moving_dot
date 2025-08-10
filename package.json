@@ -10,6 +10,9 @@
     "start:local-onnx": "DISABLE_CLOUD=true node server.js --onnx",
     "dev": "nodemon server.js",
     "dev:local": "DISABLE_CLOUD=true nodemon server.js",
+    "build": "node build.js",
+    "build:deploy": "npm run build && gcloud app deploy --quiet",
+    "deploy": "npm run build:deploy",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -43,6 +46,10 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "clean-css": "^5.3.3",
+    "fs-extra": "^11.3.1",
+    "html-minifier-terser": "^7.2.0",
+    "nodemon": "^3.1.10",
+    "terser": "^5.43.1"
   }
 }
