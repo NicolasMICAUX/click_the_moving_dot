@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
 const compression = require('compression');
+const crypto = require('crypto');
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -77,16 +78,12 @@ const EXPORT_BUCKET_NAME = 'clickthemovingdot-exports';
 // Firestore collection for ONNX models
 const MODELS_COLLECTION = 'onnx_models';
 
-// Generate short UID for model sharing
-function generateShortUID() {
-    // Use base36 encoding for short UIDs (0-9, a-z)
-    // This gives us 36^6 = ~2 billion possible combinations for 6 characters
-    const chars = '0123456789abcdefghijklmnopqrstuvwxyz';
-    let result = '';
-    for (let i = 0; i < 6; i++) {
-        result += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return result;
+// Generate UID from model URL hash to avoid duplicates
+function generateModelUID(modelUrl) {
+    // Create SHA-256 hash of the model URL
+    const hash = crypto.createHash('sha256').update(modelUrl).digest('hex');
+    // Take first 8 characters for a shorter, still unique identifier
+    return hash.substring(0, 8);
 }
 
 // Validate ONNX model URL
@@ -689,25 +686,23 @@ app.post('/api/submit-model', async (req, res) => {
             });
         }
         
-        // Generate unique UID
-        let uid;
-        let attempts = 0;
-        const maxAttempts = 10;
+        // Generate UID from model URL hash
+        const uid = generateModelUID(modelUrl);
         
-        do {
-            uid = generateShortUID();
-            attempts++;
-            
-            // Check if UID already exists
-            const existingDoc = await firestore.collection(MODELS_COLLECTION).doc(uid).get();
-            if (!existingDoc.exists) {
-                break; // Found unique UID
-            }
-            
-            if (attempts >= maxAttempts) {
-                return res.status(500).json({ error: 'Failed to generate unique UID, please try again' });
-            }
-        } while (true);
+        // Check if model already exists
+        const existingDoc = await firestore.collection(MODELS_COLLECTION).doc(uid).get();
+        if (existingDoc.exists) {
+            const existingData = existingDoc.data();
+            return res.status(200).json({ 
+                success: true, 
+                uid: uid,
+                shareUrl: `${req.protocol}://${req.get('host')}/?r=${uid}`,
+                message: 'Model already exists',
+                existing: true,
+                submittedAt: existingData.submittedAt,
+                description: existingData.description
+            });
+        }
         
         // Store in Firestore
         const modelData = {
