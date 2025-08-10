@@ -48,9 +48,11 @@ npm run start:onnx -- --onnx=path/to/your/model.onnx
 # Deploy minified production build (recommended)
 npm run deploy
 
-# Manual build and deploy
+# Or manual approach:
 npm run build
-cd dist && gcloud app deploy --quiet
+cd dist
+npm install --only=production
+gcloud app deploy --quiet
 
 # Deploy to staging for testing
 ./deploy.sh --staging

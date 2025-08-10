@@ -78,6 +78,15 @@ done
 
 echo -e "${GREEN}✅ All required files found${NC}"
 
+# Install production dependencies in the dist folder
+echo -e "${BLUE}📦 Installing production dependencies...${NC}"
+npm install --only=production
+
+if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ Failed to install production dependencies!${NC}"
+    exit 1
+fi
+
 # Modify app.yaml for different environments if needed
 if [ "$ENVIRONMENT" = "staging" ]; then
     echo -e "${BLUE}🔧 Configuring for staging environment...${NC}"
