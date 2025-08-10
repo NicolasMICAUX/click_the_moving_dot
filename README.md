@@ -1,11 +1,13 @@
-# Click the Moving Dot Game
+# 🎯 Click the Moving Dot Game
 
 A real-time HTML5 game where players try to click a moving dot that attempts to escape from their mouse cursor.  
-The dataset of all user games is publicly available: **you can train your own AI model to escape user mouse**.
+The dataset of all user games is publicly available: **you can train your own AI model to escape user mouse** 🤖
 
-## Quick Start
+🎮 **[Play the Game](https://clickthemovingdot.uc.r.appspot.com/)** | 📊 **[Download Dataset](https://clickthemovingdot.uc.r.appspot.com/dataset/)**
 
-### For Users Without Google Cloud Access (Local Mode)
+## 🚀 Quick Start
+
+### 💻 Local Mode
 
 ```bash
 # Clone the repository
@@ -22,9 +24,12 @@ npm run start:local
 npm run start:local-onnx -- --onnx=path/to/your/model.onnx
 ```
 
-The game will run at `http://localhost:3000` - **no Google Cloud setup required!**
+The game will run at `http://localhost:3000` - **no Google Cloud setup required!** 🎉
 
-### For Users With Google Cloud Access (Full Mode)
+See [**ML MODEL GUIDE**](ML_MODEL_GUIDE.md) 🧠 on how to train and export your own models.
+
+
+### ☁️ For Admins With Google Cloud Access (Full Mode)
 
 ```bash
 # Set up Google Cloud credentials
@@ -38,24 +43,37 @@ npm start
 npm run start:onnx -- --onnx=path/to/your/model.onnx
 ```
 
-See [ML MODEL GUIDE](ML_MODEL_GUIDE.md) on how to train and export your own models.
+#### ☁️ App Engine Deployment (Cloud Mode)
+```bash
+# Deploy to Google App Engine
+gcloud app deploy
+```
 
-## Game Mechanics
+#### 💻 Local Development
+```bash
+# Development with hot reload
+npm run dev
 
-- **Arena**: 800x800 pixel playing field
-- **Objective**: Click the red dot to advance levels
-- **Speed Progression**: Each level increases max speed by 0.2 units
+# Development in local mode (without Google Cloud)
+npm run dev:local
+```
 
-## API Endpoints
+## 🎮 Game Mechanics
+
+- 🏟️ **Arena**: 800x800 pixel playing field
+- 🎯 **Objective**: Click the red dot to advance levels
+- ⚡ **Speed Progression**: Each level increases max speed by 0.2 units
+
+## 🔗 API Endpoints
 
 - `GET /` - Game interface
-- `GET /dataset` - Dataset download page (cloud mode only)
-- `GET /api/onnx-model` - Serves the ONNX model (default or custom)
+- `GET /dataset` - Dataset download page (cloud mode only) 📊
+- `GET /api/onnx-model` - Serves the ONNX model (default or custom) 🤖
 - `GET /api/onnx-info` - Information about current ONNX model
-- `GET /api/download-dataset?format=csv` - Download CSV dataset (cloud mode only)
-- `POST /api/save-session` - Save game session data (cloud mode only)
+- `GET /api/download-dataset?format=csv` - Download CSV dataset (cloud mode only) 📁
+- `POST /api/save-session` - Save game session data (cloud mode only) 💾
 
-## Data Schema
+## 📋 Data Schema
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -70,7 +88,7 @@ See [ML MODEL GUIDE](ML_MODEL_GUIDE.md) on how to train and export your own mode
 | mouseX, mouseY | Float | Mouse coordinates (0-800) |
 | mouseDown | Boolean | Whether mouse button was pressed |
 
-## Environment Configuration
+## ⚙️ Environment Configuration
 
 Copy `.env.example` to `.env` and configure:
 
@@ -83,24 +101,7 @@ GOOGLE_CLOUD_PROJECT=your-project-id
 GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account-key.json
 ```
 
-## Deploy
-
-### App Engine Deployment (Cloud Mode)
-```bash
-# Deploy to Google App Engine
-gcloud app deploy
-```
-
-### Local Development
-```bash
-# Development with hot reload
-npm run dev
-
-# Development in local mode
-npm run dev:local
-```
-
-## Available Scripts
+## 📦 Available Scripts
 
 - `npm start` - Production server (cloud mode)
 - `npm run start:local` - Production server (local mode)
@@ -109,7 +110,7 @@ npm run dev:local
 - `npm run dev` - Development server (cloud mode)
 - `npm run dev:local` - Development server (local mode)
 
-## Project Structure
+## 📁 Project Structure
 ```
 ├── server.js              # Main server file
 ├── public/
@@ -120,6 +121,6 @@ npm run dev:local
 └── package.json           # Dependencies and scripts
 ```
 
-## License
+## 📄 License
 
 MIT License
