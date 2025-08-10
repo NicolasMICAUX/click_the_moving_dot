@@ -582,8 +582,12 @@ app.get('/api/onnx-model', async (req, res) => {
                 onnxPath = path.join(__dirname, customOnnxFile);
             }
         } else {
-            // Default ONNX file
-            onnxPath = path.join(__dirname, 'public', 'dummy_dot_behavior.onnx');
+            // No default ONNX file - use defaultDotBehavior instead
+            return res.status(404).json({ 
+                error: 'No ONNX model configured - using default behavior',
+                message: 'Run with --onnx=path/to/model.onnx to use AI behavior',
+                useDefault: true
+            });
         }
         
         // Check if file exists
@@ -620,21 +624,32 @@ app.get('/api/onnx-info', (req, res) => {
             onnxPath = path.join(__dirname, customOnnxFile);
         }
         isCustom = true;
+        
+        const exists = fs.existsSync(onnxPath);
+        const stats = exists ? fs.statSync(onnxPath) : null;
+        
+        res.json({
+            path: onnxPath,
+            filename: path.basename(onnxPath),
+            isCustom: isCustom,
+            exists: exists,
+            size: stats ? stats.size : null,
+            modified: stats ? stats.mtime : null,
+            usingDefault: false
+        });
     } else {
-        onnxPath = path.join(__dirname, 'public', 'dummy_dot_behavior.onnx');
+        // No ONNX model configured - using default behavior
+        res.json({
+            path: null,
+            filename: null,
+            isCustom: false,
+            exists: false,
+            size: null,
+            modified: null,
+            usingDefault: true,
+            message: 'Using defaultDotBehavior instead of ONNX model'
+        });
     }
-    
-    const exists = fs.existsSync(onnxPath);
-    const stats = exists ? fs.statSync(onnxPath) : null;
-    
-    res.json({
-        path: onnxPath,
-        filename: path.basename(onnxPath),
-        isCustom: isCustom,
-        exists: exists,
-        size: stats ? stats.size : null,
-        modified: stats ? stats.mtime : null
-    });
 });
 
 // Submit ONNX model endpoint
@@ -871,7 +886,8 @@ server.listen(PORT, async () => {
     if (customOnnxFile) {
         console.log(`🤖 Using custom ONNX model: ${customOnnxFile}`);
     } else {
-        console.log('🤖 Using default ONNX model');
+        console.log('🤖 Using default dot behavior (no ONNX model)');
+        console.log('   To use an ONNX model, run with: --onnx=path/to/model.onnx');
     }
     
     console.log(`🔗 ONNX model info: http://localhost:${PORT}/api/onnx-info`);

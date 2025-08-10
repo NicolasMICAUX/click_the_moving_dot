@@ -153,18 +153,18 @@
                     const modelLoaded = await this.dotAI.loadModel(modelUrl);
                     if (modelLoaded) {
                         console.log('✅ AI model loaded successfully - using AI for dot behavior');
-                        document.getElementById('aiStatus').textContent = sharedModelUid ? `Shared Model (${sharedModelUid})` : 'Enabled';
+                        document.getElementById('aiStatus').textContent = sharedModelUid ? `Shared Model (${sharedModelUid})` : 'ONNX Model';
                         document.getElementById('aiStatus').style.color = '#28a745';
                     } else {
-                        console.log('❌ AI model not available - using default behavior');
-                        document.getElementById('aiStatus').textContent = 'Disabled (Default)';
-                        document.getElementById('aiStatus').style.color = '#dc3545';
+                        console.log('Using default dot behavior');
+                        document.getElementById('aiStatus').textContent = 'Default Behavior';
+                        document.getElementById('aiStatus').style.color = '#6f42c1';
                     }
                 } catch (error) {
                     console.error('❌ Error loading AI model:', error);
                     console.log('Falling back to default behavior');
-                    document.getElementById('aiStatus').textContent = 'Disabled (Error)';
-                    document.getElementById('aiStatus').style.color = '#dc3545';
+                    document.getElementById('aiStatus').textContent = 'Default Behavior';
+                    document.getElementById('aiStatus').style.color = '#6f42c1';
                 }
             }
             
@@ -471,6 +471,14 @@
                     // Fetch the model to check if it exists
                     const response = await fetch(modelPath);
                     if (!response.ok) {
+                        // Check if this is the expected "no model configured" case
+                        if (response.status === 404) {
+                            const errorData = await response.json().catch(() => ({}));
+                            if (errorData.useDefault) {
+                                console.log('📝 No ONNX model configured - using default behavior');
+                                return false; // This is expected, not an error
+                            }
+                        }
                         throw new Error(`Failed to fetch model: ${response.status} ${response.statusText}`);
                     }
                     
